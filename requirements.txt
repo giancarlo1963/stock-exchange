@@ -1,0 +1,11 @@
+# Dipendenze di SET X-Ray. Installa con:  pip install -r requirements.txt
+yfinance>=0.2.40      # dati di mercato e bilanci (Yahoo Finance)
+pandas>=2.0
+numpy>=1.24
+plotly>=5.18          # grafici
+streamlit>=1.32       # interfaccia web
+
+# Facoltativo: serve solo a `python -m setxray SIMBOLO --grafici cartella/`
+# per esportare i grafici in PNG. Richiede anche un browser Chrome
+# (`plotly_get_chrome`). L'app web e la CLI funzionano senza.
+# kaleido>=1.0
