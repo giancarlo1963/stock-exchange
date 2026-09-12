@@ -30,7 +30,26 @@ Da dove viene il punteggio di solidità, fattore per fattore.
 
 ---
 
-## Installazione e uso
+## Provarlo dal telefono
+
+Non serve installare niente: **[anteprima interattiva](https://claude.ai/code/artifact/a40605c8-4d90-44da-83c7-c7ddcb5fa1a1)**
+con quattro aziende di prova e i risultati veri del motore di analisi. Dati
+sintetici, per capire come ragiona lo strumento.
+
+Per i **titoli veri** serve tenere l'app online, perche' l'analisi gira in
+Python e scarica i dati al momento. Si fa gratis da Streamlit Community Cloud,
+anche dal browser del telefono:
+
+**[Modulo di pubblicazione gia' compilato](https://share.streamlit.io/deploy?repository=giancarlo1963%2Fstock-exchange&branch=claude%2Fthailand-equity-analyzer-rfrfkp&mainModule=app.py)**
+— entra con GitHub, premi *Deploy*, aspetta un paio di minuti. Ottieni un
+indirizzo tuo da aggiungere alla schermata Home.
+
+Una avvertenza su quella strada: Yahoo Finance limita le richieste per
+indirizzo IP, e su un servizio condiviso capita di incontrare il limite piu'
+spesso che da casa. Se accade, aspetta qualche minuto o fornisci i dividendi
+via CSV (vedi sotto), che non dipende da nessuna API.
+
+## Installazione locale
 
 Serve Python 3.10 o successivo.
 
