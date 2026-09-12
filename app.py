@@ -195,9 +195,11 @@ if avvia:
 # Cambiare lingua rifa l'analisi: le frasi nascono dentro il motore e sono
 # state costruite nella lingua di prima. I dati non si riscaricano - hanno la
 # loro cache su disco - quindi costa un ricalcolo, non una rete.
+# L'etichetta resta visibile: senza, due parole con un pallino in cima alla
+# pagina si possono prendere per decorazione. Con scritto "Lingua" sopra, si
+# capisce che e' un comando anche senza toccarlo.
 st.radio(L("Language", "Lingua"), CODES, key="lingua", horizontal=True,
-         index=CODES.index(_LINGUA), format_func=lambda codice: NAMES[codice],
-         label_visibility="collapsed")
+         index=CODES.index(_LINGUA), format_func=lambda codice: NAMES[codice])
 if _DA_URL != _LINGUA:
     st.session_state["_lingua_indirizzo"] = _LINGUA
     st.query_params["lang"] = _LINGUA
@@ -322,6 +324,10 @@ sottotitolo.append(L(f"data as of {fmt.date(m.trend.get('last_date'))}",
                      f"dati al {fmt.date(m.trend.get('last_date'))}"))
 if analisi.data.from_cache:
     sottotitolo.append(L("from local cache", "da cache locale"))
+# La versione qui e non solo nella barra laterale: sul telefono la barra e'
+# chiusa, e quando si aspetta un aggiornamento la prima domanda e' "e'
+# arrivato?". Una riga che risponde da sola vale i sei caratteri che occupa.
+sottotitolo.append(f"v{__version__}")
 st.caption(" · ".join(sottotitolo))
 
 # --- the dividend answer, before everything else --------------------------
