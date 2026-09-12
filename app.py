@@ -11,7 +11,6 @@ the answer first, the evidence after.
 from __future__ import annotations
 
 import io
-from urllib.parse import quote
 
 import pandas as pd
 import streamlit as st
@@ -28,14 +27,17 @@ from setxray.sources import describe_sources
 # legge, compreso il titolo della pagina. Sta nell'indirizzo (?lang=it) perche'
 # un collegamento condiviso deve aprirsi nella lingua di chi lo ha mandato, e
 # nello stato della sessione perche' sopravviva a un clic sui pulsanti.
-# L'indirizzo viene prima della sessione: un collegamento con ?lang=it deve
-# aprirsi in italiano anche se l'interruttore era su un'altra lingua. Quando i
-# due non concordano vince l'indirizzo, e l'interruttore viene allineato prima
-# di disegnarlo - altrimenti mostrerebbe una lingua e la pagina un'altra.
+# L'indirizzo vince quando *cambia*, non a ogni giro: un collegamento con
+# ?lang=it deve aprirsi in italiano, ma la pagina riscrive ?lang= da sola a
+# ogni rerun, e dare sempre la precedenza all'indirizzo annullava il clic
+# sull'interruttore un istante dopo averlo fatto. Percio' si ricorda l'ultimo
+# valore letto: se quello nell'indirizzo e' diverso, qualcuno e' arrivato da
+# fuori e ha ragione lui.
 _DA_URL = normalize(st.query_params["lang"]) if st.query_params.get("lang") else None
-if _DA_URL and st.session_state.get("lingua") != _DA_URL:
+if _DA_URL and _DA_URL != st.session_state.get("_lingua_indirizzo"):
+    st.session_state["_lingua_indirizzo"] = _DA_URL
     st.session_state["lingua"] = _DA_URL
-_LINGUA = set_language(_DA_URL or st.session_state.get("lingua") or "en")
+_LINGUA = set_language(st.session_state.get("lingua") or _DA_URL or "en")
 
 st.set_page_config(page_title=L("SET X-Ray - Thai stock dividends and analysis",
                                 "SET X-Ray - dividendi e analisi azioni Thailandia"),
@@ -69,10 +71,7 @@ st.markdown("""
                           letter-spacing: 0.05em; opacity: 0.7; margin-bottom: 2px; }
     .disagreement { border-left: 4px solid #ec835a; background: rgba(236,131,90,0.10);
                     padding: 10px 14px; border-radius: 6px; margin-top: 8px; }
-    .lingua-riga { text-align: right; font-size: 0.8rem; opacity: 0.78;
-                   margin: -6px 0 2px 0; letter-spacing: 0.02em; }
-    .lingua-riga span { font-weight: 600; }
-    .lingua-riga a { text-decoration: underline; text-underline-offset: 3px; }
+    
   </style>
   """, unsafe_allow_html=True)
 
@@ -114,17 +113,6 @@ with st.sidebar:
     st.markdown("### SET X-Ray")
     # L'interruttore in cima, prima di tutto il resto: chi apre la pagina nella
     # lingua sbagliata lo trova subito, senza scorrere.
-    scelta = st.radio(L("Language", "Lingua"), CODES, horizontal=True,
-                      index=CODES.index(_LINGUA), key="lingua",
-                      format_func=lambda codice: NAMES[codice],
-                      label_visibility="collapsed")
-    if scelta != _LINGUA:
-        # Cambiare lingua rifa l'analisi: le frasi nascono dentro il motore, e
-        # sono state costruite nella lingua di prima. I dati non si riscaricano,
-        # la cache su disco li tiene.
-        st.query_params["lang"] = scelta
-        st.rerun()
-    st.query_params["lang"] = _LINGUA
     st.caption(L(f"Dividends and fundamental analysis - Stock Exchange of Thailand - version "
                  f"{__version__}",
                  f"Dividendi e analisi fondamentale - Borsa di Thailandia - versione {__version__}"))
@@ -191,24 +179,28 @@ if avvia:
     st.session_state["esegui"] = True
 
 # --------------------------------------------------------------------------
-# la lingua, raggiungibile anche dal telefono
+# la lingua: in cima alla pagina, non nella barra laterale
 # --------------------------------------------------------------------------
-# L'interruttore vero sta nella barra laterale, ma sul telefono Streamlit la
-# tiene chiusa: chi apre la pagina da li' non lo vede, e non ha modo di sapere
-# che c'e'. Questa riga sta sempre in vista e porta all'altra lingua
-# ricaricando la pagina. Porta dentro anche il simbolo, altrimenti il
-# collegamento perderebbe l'analisi che si stava guardando.
-def riga_lingua() -> str:
-    altra = "it" if _LINGUA == "en" else "en"
-    pezzi = [f"lang={altra}"]
-    corrente = st.session_state.get("simbolo") or ""
-    if corrente:
-        pezzi.insert(0, f"symbol={quote(corrente)}")
-    return (f"<div class='lingua-riga'><span>{NAMES[_LINGUA]}</span> · "
-            f"<a href='?{'&'.join(pezzi)}' target='_self'>{NAMES[altra]}</a></div>")
-
-
-st.markdown(riga_lingua(), unsafe_allow_html=True)
+# Stava nella barra laterale, che sul telefono Streamlit apre chiusa: chi
+# arrivava da li' non la vedeva e non aveva modo di sapere che ci fosse. Qui
+# e' la prima cosa della pagina, su entrambi gli schermi, e ce n'e' una sola:
+# due controlli per la stessa scelta si contraddicono il giorno in cui uno dei
+# due non viene aggiornato.
+# Un radio orizzontale e non due pulsanti in colonne: sul telefono le colonne
+# di Streamlit si impilano, e due pulsanti a piena larghezza in cima alla
+# pagina rubano la scena a quello che c'e' sotto. Il radio resta su una riga a
+# qualunque larghezza, e non si puo' deselezionare - una lingua "nessuna" non
+# esiste.
+#
+# Cambiare lingua rifa l'analisi: le frasi nascono dentro il motore e sono
+# state costruite nella lingua di prima. I dati non si riscaricano - hanno la
+# loro cache su disco - quindi costa un ricalcolo, non una rete.
+st.radio(L("Language", "Lingua"), CODES, key="lingua", horizontal=True,
+         index=CODES.index(_LINGUA), format_func=lambda codice: NAMES[codice],
+         label_visibility="collapsed")
+if _DA_URL != _LINGUA:
+    st.session_state["_lingua_indirizzo"] = _LINGUA
+    st.query_params["lang"] = _LINGUA
 
 if not st.session_state.get("esegui"):
     st.title(L("Dividends and analysis of a Stock Exchange of Thailand share",
@@ -639,6 +631,8 @@ with schede[2]:
     st.markdown("<div class='prose'>" + "".join(f"<p>{p}</p>" for p in analisi.narrative["present"])
                 + "</div>", unsafe_allow_html=True)
     st.plotly_chart(charts.price_chart(m, v, analisi.data.prices, scuro), use_container_width=True)
+    # L'RSI subito sotto il prezzo: e' la stessa domanda vista da vicino.
+    st.plotly_chart(charts.rsi_chart(m, analisi.data.prices, scuro), use_container_width=True)
     due = st.columns(2)
     due[0].plotly_chart(charts.multiple_history_chart(m, "pe", scuro), use_container_width=True)
     due[1].plotly_chart(charts.multiple_history_chart(m, "pb", scuro), use_container_width=True)
@@ -756,6 +750,8 @@ with schede[5]:
         L("Dividend yield", "Dividendo"): fmt.pct(m.dividend.get("yield_current")),
         L("Beta against the SET index", "Beta contro indice SET"): fmt.ratio(m.trend.get("beta")),
         L("Annual volatility", "Volatilita' annua"): fmt.pct(m.trend.get("volatility")),
+        L(f"RSI ({charts.RSI_PERIODS} days)", f"RSI ({charts.RSI_PERIODS} giorni)"):
+            fmt.num(m.trend.get("rsi"), 0),
         L("Required return (models)", "Rendimento richiesto (modelli)"): fmt.pct(v.cost_of_equity),
     }
     st.dataframe(pd.DataFrame({L("Item",

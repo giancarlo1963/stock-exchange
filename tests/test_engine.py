@@ -51,7 +51,7 @@ class TestCatenaCompleta:
 class TestGrafici:
     def test_tutti_i_grafici_si_costruiscono(self, analisi):
         figure = charts.all_charts(analisi)
-        assert len(figure) == 12
+        assert len(figure) == 13
         for nome, figura in figure.items():
             assert figura.layout.height, f"{nome} senza altezza"
 
@@ -109,3 +109,45 @@ class TestCoerenzaInterna:
         copertura = analisi.data.data_coverage()
         assert copertura["Price history"] is True
         assert all(isinstance(valore, bool) for valore in copertura.values())
+
+
+class TestRSINelRacconto:
+    """L'RSI compare a parole solo quando dice qualcosa."""
+
+    def _con_coda(self, profilo: str, fattore: float):
+        """Lo stesso titolo con gli ultimi 40 giorni tutti nella stessa direzione."""
+        dati = build_demo(profilo)
+        prezzi = dati.prices.copy()
+        coda = prezzi.index[-40:]
+        moltiplicatori = pd.Series(
+            [fattore ** (i + 1) for i in range(len(coda))], index=coda)
+        for colonna in ("Close", "AdjClose", "Open", "High", "Low"):
+            if colonna in prezzi:
+                prezzi.loc[coda, colonna] = prezzi.loc[coda, colonna] * moltiplicatori
+        dati.prices = prezzi
+        return analyze_data(dati)
+
+    def test_ipervenduto_viene_detto(self):
+        analisi = self._con_coda("solida", 0.985)
+        assert analisi.metrics.trend["rsi"] < 30
+        frasi = [p for p in analisi.narrative["present"] if "RSI" in p]
+        assert frasi and "oversold" in frasi[0]
+
+    def test_ipercomprato_viene_detto(self):
+        analisi = self._con_coda("dividendo", 1.015)
+        assert analisi.metrics.trend["rsi"] > 70
+        frasi = [p for p in analisi.narrative["present"] if "RSI" in p]
+        assert frasi and "overbought" in frasi[0]
+
+    def test_in_mezzo_non_si_dice_niente(self):
+        """Una frase che non aggiunge niente fa perdere fiducia in quelle accanto."""
+        analisi = analyze_data(build_demo("tagliato"))
+        assert 30 < analisi.metrics.trend["rsi"] < 70
+        assert not [p for p in analisi.narrative["present"] if "RSI" in p]
+
+    def test_il_grafico_dice_la_zona(self):
+        from setxray import charts
+
+        analisi = self._con_coda("solida", 0.985)
+        fig = charts.rsi_chart(analisi.metrics, analisi.data.prices)
+        assert "oversold" in fig.layout.title.text

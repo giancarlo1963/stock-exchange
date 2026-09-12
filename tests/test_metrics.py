@@ -5,7 +5,8 @@ import pandas as pd
 import pytest
 
 from setxray.datasource import StockData, normalize_symbol, row
-from setxray.metrics import cagr, compute_metrics, pct, percentile_of, safe_div
+from setxray.metrics import cagr, compute_metrics, pct, percentile_of, rsi, safe_div
+from setxray.demo import build_demo
 
 
 class TestNormalizzazioneSimbolo:
@@ -96,3 +97,51 @@ class TestDatiInsufficienti:
         m = compute_metrics(StockData(symbol="XYZ", yahoo_symbol="XYZ.BK"))
         assert m.price is None
         assert m.n_years == 0
+
+
+class TestRSI:
+    """L'RSI e' un numero che l'utente confronta con la sua piattaforma."""
+
+    # La serie di esempio di Wilder, con i valori pubblicati da StockCharts.
+    PREZZI = [44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84, 46.08,
+              45.89, 46.03, 45.61, 46.28, 46.28, 46.00, 46.03, 46.41, 46.22, 45.64,
+              46.21, 46.25, 45.71, 46.45, 45.78, 45.35, 44.03, 44.18, 44.22, 44.57,
+              43.42, 42.66, 43.13]
+    ATTESI = [70.46, 66.25, 66.48, 69.35, 66.29, 57.92, 62.88, 63.21, 56.01, 62.34,
+              54.67, 50.39, 39.99, 41.46, 41.87, 45.46, 37.30, 33.08, 37.77]
+
+    def _serie(self, valori):
+        return pd.Series(valori, index=pd.date_range("2026-01-01", periods=len(valori)))
+
+    def test_coincide_con_i_valori_di_wilder(self):
+        """L'innesco conta: con la media esponenziale da subito si sbaglia di 20 punti."""
+        calcolato = rsi(self._serie(self.PREZZI))
+        assert len(calcolato) == len(self.ATTESI)
+        for mio, atteso in zip(calcolato.values, self.ATTESI):
+            assert abs(float(mio) - atteso) < 0.05, (mio, atteso)
+
+    def test_estremi(self):
+        import numpy as np
+
+        assert float(rsi(self._serie(np.arange(1, 41.0))).iloc[-1]) == pytest.approx(100.0)
+        assert float(rsi(self._serie(np.arange(40, 0.0, -1))).iloc[-1]) == pytest.approx(0.0)
+        # prezzo fermo: ne' salite ne' discese, quindi il centro
+        assert float(rsi(self._serie([10.0] * 40)).iloc[-1]) == pytest.approx(50.0)
+
+    def test_resta_nell_intervallo(self):
+        import numpy as np
+
+        caso = np.random.default_rng(7).normal(100, 4, 400).cumsum() / 100 + 50
+        valori = rsi(self._serie(caso))
+        assert valori.between(0, 100).all()
+        assert not valori.isna().any()
+
+    def test_senza_dati_abbastanza_non_inventa(self):
+        assert rsi(None) is None
+        assert rsi(self._serie([1.0, 2.0, 3.0])) is None        # meno di 15 punti
+        assert rsi(self._serie([1.0] * 14)) is None
+
+    def test_finisce_nel_quadro_della_tendenza(self):
+        m = compute_metrics(build_demo("dividendo"))
+        assert 0 <= m.trend["rsi"] <= 100
+        assert m.trend["rsi_periods"] == 14

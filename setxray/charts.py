@@ -22,7 +22,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from setxray import fmt
-from setxray.metrics import Metrics
+from setxray.metrics import (RSI_IPERCOMPRATO, RSI_IPERVENDUTO, RSI_PERIODS,
+                             Metrics, rsi)
 from setxray.scoring import Verdict
 from setxray.valuation import Valuation
 from setxray.lang import L
@@ -33,12 +34,14 @@ LIGHT = {
     "grid": "#e1e0d9", "axis": "#c3c2b7", "band": "rgba(11,11,11,0.06)",
     "s1": "#2a78d6", "s2": "#eb6834", "s3": "#1baf7a", "s4": "#eda100",
     "good": "#0ca30c", "warning": "#fab219", "serious": "#ec835a", "critical": "#d03b3b",
+    "band_good": "rgba(12,163,12,0.10)", "band_bad": "rgba(208,59,59,0.10)",
 }
 DARK = {
     "surface": "#1a1a19", "ink": "#ffffff", "ink2": "#c3c2b7", "muted": "#898781",
     "grid": "#2c2c2a", "axis": "#383835", "band": "rgba(255,255,255,0.08)",
     "s1": "#3987e5", "s2": "#d95926", "s3": "#199e70", "s4": "#c98500",
     "good": "#0ca30c", "warning": "#fab219", "serious": "#ec835a", "critical": "#d03b3b",
+    "band_good": "rgba(12,163,12,0.16)", "band_bad": "rgba(208,59,59,0.16)",
 }
 FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
 
@@ -396,6 +399,77 @@ def health_chart(m: Metrics, dark: bool = False) -> go.Figure:
 
 
 # --------------------------------------------------------------------------
+# 8b. RSI: il prezzo e' corso troppo in fretta?
+# --------------------------------------------------------------------------
+def rsi_chart(m: Metrics, prices: Optional[pd.DataFrame], dark: bool = False,
+              anni: float = 2.0) -> go.Figure:
+    """L'RSI con le due zone, ipercomprato e ipervenduto.
+
+    Due anni e non dieci: l'RSI e' un indicatore di settimane, e dieci anni di
+    valori giornalieri diventano una matassa in cui non si legge niente.
+    """
+    t = tokens(dark)
+    if prices is None or prices.empty:
+        return _empty(L("Price history not available", "Storico prezzi non disponibile"), t)
+    serie = rsi(prices["Close"])
+    if serie is None or serie.empty:
+        return _empty(L("Price history too short to compute the RSI",
+                        "Storico prezzi troppo corto per calcolare l'RSI"), t)
+    finestra = serie[serie.index >= serie.index[-1] - pd.Timedelta(days=int(365.25 * anni))]
+    if len(finestra) < 30:
+        finestra = serie
+
+    fig = go.Figure()
+    # Le zone come fasce, non come linee tratteggiate: la fascia dice "qui
+    # dentro" mentre una linea dice solo "sopra questo".
+    fig.add_hrect(y0=RSI_IPERCOMPRATO, y1=100, fillcolor=t["band_bad"], line_width=0, layer="below")
+    fig.add_hrect(y0=0, y1=RSI_IPERVENDUTO, fillcolor=t["band_good"], line_width=0, layer="below")
+    fig.add_hline(y=50, line=dict(color=t["axis"], width=1))
+    fig.add_trace(_line(finestra.index, finestra.values, L("RSI", "RSI"), t["s1"], t, width=1.8))
+
+    for valore, colore, testo in (
+            (RSI_IPERCOMPRATO, t["critical"], L("overbought 70", "ipercomprato 70")),
+            (RSI_IPERVENDUTO, t["good"], L("oversold 30", "ipervenduto 30"))):
+        fig.add_hline(y=valore, line=dict(color=colore, width=1.2),
+                      annotation_text=testo, annotation_position="top left",
+                      annotation_font=dict(size=11, color=colore))
+
+    attuale = float(finestra.iloc[-1])
+    zona = (L("overbought", "ipercomprato") if attuale >= RSI_IPERCOMPRATO
+            else L("oversold", "ipervenduto") if attuale <= RSI_IPERVENDUTO
+            else L("neutral", "zona neutra"))
+    colore = (t["critical"] if attuale >= RSI_IPERCOMPRATO
+              else t["good"] if attuale <= RSI_IPERVENDUTO else t["ink2"])
+    fig.add_trace(go.Scatter(
+        x=[finestra.index[-1]], y=[attuale], mode="markers+text", showlegend=False,
+        marker=dict(color=colore, size=9, line=dict(color=t["surface"], width=2)),
+        text=[f"  {fmt.num(attuale, 0)}"], textposition="middle right",
+        textfont=dict(size=12, color=colore),
+        hovertemplate=L("today: %{y:.0f}<extra></extra>", "oggi: %{y:.0f}<extra></extra>"),
+    ))
+
+    fig = _layout(
+        fig, t,
+        title=L(f"RSI at {RSI_PERIODS} days: has the price run too fast?",
+                f"RSI a {RSI_PERIODS} giorni: il prezzo e' corso troppo?"),
+        # Il sottotitolo va a capo a mano: Plotly non manda a capo il titolo, e
+        # su uno schermo strétto la riga finirebbe fuori dal riquadro.
+        subtitle=L(f"Today {fmt.num(attuale, 0)}, {zona}. Above 70 the recent rise has been "
+                   "one-sided, below 30 the fall has."
+                   "<br>It measures weeks, not years: it helps pick the day to buy, not what "
+                   "to buy.",
+                   f"Oggi {fmt.num(attuale, 0)}, {zona}. Sopra 70 la salita recente e' stata "
+                   "tutta in una direzione, sotto 30 lo e' stata la discesa."
+                   "<br>Misura settimane, non anni: serve a scegliere il giorno in cui "
+                   "comprare, non cosa comprare."),
+        height=320)
+    fig.update_yaxes(range=[0, 100], tickvals=[0, 30, 50, 70, 100])
+    # due righe di sottotitolo hanno bisogno di piu' spazio in alto
+    fig.update_layout(showlegend=False, margin=dict(l=56, r=44, t=104, b=48))
+    return fig
+
+
+# --------------------------------------------------------------------------
 # 9. history of the multiple
 # --------------------------------------------------------------------------
 def multiple_history_chart(m: Metrics, key: str = "pe", dark: bool = False) -> go.Figure:
@@ -596,6 +670,7 @@ def all_charts(analysis, dark: bool = False) -> dict[str, go.Figure]:
         "cash": cashflow_chart(m, dark),
         "eps_dividend": eps_dividend_chart(m, dark),
         "strength": health_chart(m, dark),
+        "rsi": rsi_chart(m, prices, dark),
         "multiple_pe": multiple_history_chart(m, "pe", dark),
         "dividend": dividend_chart(m, dark),
     }

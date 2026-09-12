@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Optional
 
 from setxray import fmt
-from setxray.metrics import Metrics
+from setxray.metrics import RSI_IPERCOMPRATO, RSI_IPERVENDUTO, RSI_PERIODS, Metrics
 from setxray.scoring import Verdict
 from setxray.valuation import Valuation
 from setxray.lang import L, plural
@@ -367,6 +367,34 @@ def present(m: Metrics, v: Valuation) -> list[str]:
                            f"{'meglio' if excess > 0 else 'peggio'} "
                            f"dell'indice SET di {fmt.pct(abs(excess))}"))
         out.append(sentence + ".")
+
+    # L'RSI in una frase. Vale la pena dirlo solo quando e' in una delle due
+    # zone: nel mezzo non aggiunge niente a quello che si e' appena letto, e
+    # una frase che non aggiunge niente fa perdere fiducia in quelle accanto.
+    indice_forza = m.trend.get("rsi")
+    if indice_forza is not None:
+        if indice_forza >= RSI_IPERCOMPRATO:
+            out.append(L(f"The {RSI_PERIODS}-day RSI is at {fmt.num(indice_forza, 0)}, in "
+                         "overbought territory: the recent rise has been one-sided, and whoever "
+                         "buys today is paying after it. It says nothing about the value of the "
+                         "company - it measures weeks - but on a purchase you can postpone by a "
+                         "few days it is worth a look.",
+                         f"L'RSI a {RSI_PERIODS} giorni e' a {fmt.num(indice_forza, 0)}, in zona "
+                         "di ipercomprato: la salita recente e' stata tutta in una direzione, e "
+                         "chi compra oggi la paga dopo. Non dice niente sul valore dell'azienda "
+                         "- misura settimane - ma su un acquisto che si puo' rinviare di qualche "
+                         "giorno vale la pena guardarlo."))
+        elif indice_forza <= RSI_IPERVENDUTO:
+            out.append(L(f"The {RSI_PERIODS}-day RSI is at {fmt.num(indice_forza, 0)}, in "
+                         "oversold territory: the recent fall has been one-sided. On a stock "
+                         "whose accounts hold up this is the kind of moment that makes an entry "
+                         "cheaper; on one whose accounts do not, it is the market being right "
+                         "early.",
+                         f"L'RSI a {RSI_PERIODS} giorni e' a {fmt.num(indice_forza, 0)}, in zona "
+                         "di ipervenduto: la discesa recente e' stata tutta in una direzione. Su "
+                         "un titolo con i conti in ordine e' il tipo di momento che rende "
+                         "l'ingresso piu' conveniente; su uno con i conti che non tengono, e' il "
+                         "mercato che ha ragione in anticipo."))
     return out
 
 

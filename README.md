@@ -14,11 +14,10 @@ years, and answers a single question:
 The horizon is **one to two years at the very least**. This is not a trading
 tool.
 
-**In English or in Italian.** The switch is at the top of the sidebar, and
-there is a plain link at the top right of the page as well — on a phone
-Streamlit keeps the sidebar closed, so the link is the one you actually reach.
-Either way the address carries the choice (`?lang=it`), so a link you share
-opens in the language you were reading.
+**In English or in Italian.** The switch is the first thing on the page, not in
+the sidebar — on a phone Streamlit opens with the sidebar closed, and a control
+nobody can find is not a control. The address carries the choice (`?lang=it`),
+so a link you share opens in the language you were reading.
 
 The language changes every word the tool writes — the analyst's prose, the
 charts, the report, the terminal — and every figure with it, because the two
@@ -44,6 +43,10 @@ How much of the return came from the coupons and how much from the price.
 Where the safety score comes from, factor by factor.
 
 ![Safety factors](docs/safety-factors.png)
+
+And, for timing an entry rather than choosing one, the RSI with its two zones.
+
+![RSI with overbought and oversold zones](docs/rsi.png)
 
 ---
 
@@ -216,6 +219,23 @@ cadence). A 365-day window over payments on near-fixed dates captures now two an
 now one depending on the day, and the percentile would end up comparing two
 different things.
 
+### 3b. Has the price run too fast? (RSI)
+
+The 14-day RSI, with the two classic zones: above 70 the recent rise has been
+one-sided (overbought), below 30 the fall has (oversold). Wilder's own
+definition — the exponential average seeded with the simple average of the
+first 14 moves — so the number matches what your platform shows. The chart
+covers two years, not ten: this is an indicator of weeks, and ten years of
+daily values is a hairball.
+
+It is deliberately **outside the score**. The score answers "is this worth
+owning for one to two years"; the RSI answers "has the last month been
+one-sided" — and letting a four-week indicator move a two-year verdict would be
+mixing two different questions. It earns its place for the one thing it does
+tell you: on a purchase you can postpone by a few days, it says whether today
+is a bad day to be the buyer. The written analysis mentions it only when it is
+in one of the two zones; in the middle it has nothing to add.
+
 ### 4. Will the dividend hold?
 
 A 0-100 score that starts at 50 and adds the points of seven factors, **each one
@@ -309,7 +329,7 @@ setxray/
   valuation.py         four valuation models and the cost of equity
   scoring.py           five pillars, red flags, general verdict
   narrative.py         the written analysis + markdown report
-  charts.py            eighteen charts (Plotly)
+  charts.py            nineteen charts (Plotly)
   engine.py            analyze(): the thread that ties it together
   lang.py              the language: one choice, two words for every sentence
   cli.py · demo.py · fmt.py

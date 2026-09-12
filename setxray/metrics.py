@@ -58,6 +58,58 @@ def pct(a: Optional[float], b: Optional[float]) -> Optional[float]:
     return a / abs(b) - 1.0
 
 
+# Le due soglie classiche dell'RSI. Non sono una legge di natura: sono la
+# convenzione di Wilder, che le ha scelte nel 1978 e da allora sono quelle che
+# tutti guardano - il che, su un indicatore che funziona perche' molti lo
+# guardano, e' esattamente il motivo per cui restano quelle.
+RSI_PERIODS = 14
+RSI_IPERCOMPRATO = 70.0
+RSI_IPERVENDUTO = 30.0
+
+
+def rsi(close: Optional[pd.Series], periods: int = RSI_PERIODS) -> Optional[pd.Series]:
+    """L'RSI di Wilder sulla serie delle chiusure, come serie completa.
+
+    Misura quanto dei movimenti recenti e' stato al rialzo: 100 se sono stati
+    tutti al rialzo, 0 se tutti al ribasso, 50 se si bilanciano. Sopra 70 si
+    parla di ipercomprato, sotto 30 di ipervenduto.
+
+    Due dettagli che decidono se il numero e' quello giusto:
+
+    - la media e' quella esponenziale di Wilder (alpha = 1/periodi), non la
+      media semplice;
+    - la prima media si innesca con la media *semplice* dei primi `periods`
+      movimenti, e solo da li' parte lo smorzamento. Senza questo innesco i
+      valori sbagliano di parecchio all'inizio - contro la serie di esempio di
+      Wilder lo scarto arrivava a 20 punti - e su una serie corta non
+      convergono mai. Con l'innesco il numero coincide con quello che l'utente
+      vede sulla sua piattaforma, che e' l'unico modo di poterlo confrontare.
+    """
+    if close is None:
+        return None
+    serie = close.dropna()
+    if len(serie) < periods + 1:
+        return None
+    variazione = serie.diff().dropna()
+    salite = variazione.clip(lower=0.0)
+    discese = (-variazione).clip(lower=0.0)
+
+    def smorzata(valori: pd.Series) -> pd.Series:
+        seme = float(valori.iloc[:periods].mean())
+        coda = valori.iloc[periods:]
+        innescata = pd.concat([pd.Series([seme], index=[valori.index[periods - 1]]), coda])
+        return innescata.ewm(alpha=1.0 / periods, adjust=False).mean()
+
+    media_salite, media_discese = smorzata(salite), smorzata(discese)
+    # Senza discese l'RSI e' 100 per definizione: la divisione andrebbe a
+    # infinito, e un infinito che arriva fino a un grafico si vede.
+    forza = media_salite / media_discese.replace(0.0, np.nan)
+    fuori = 100.0 - 100.0 / (1.0 + forza)
+    fuori = fuori.where(media_discese > 0, 100.0)
+    fuori = fuori.where(~((media_salite == 0) & (media_discese == 0)), 50.0)
+    return fuori.dropna()
+
+
 def percentile_of(series: Optional[pd.Series], value: Optional[float]) -> Optional[float]:
     """In che percentile della propria storia si trova `value` (0 = minimo)."""
     value = coerce_float(value)
@@ -638,6 +690,14 @@ def _build_trend(data: StockData, price: Optional[float]) -> dict:
         out["max_drawdown"] = float(drawdown.min())
         five_years = drawdown[drawdown.index >= drawdown.index[-1] - pd.Timedelta(days=1826)]
         out["max_drawdown_5y"] = float(five_years.min()) if not five_years.empty else None
+
+    # RSI: dice se il prezzo e' corso troppo in fretta, in un senso o nell'altro.
+    # Non entra nel punteggio - guarda le settimane, non gli anni - ma su un
+    # orizzonte lungo serve a scegliere il giorno in cui entrare.
+    serie_rsi = rsi(close)
+    if serie_rsi is not None and not serie_rsi.empty:
+        out["rsi"] = float(serie_rsi.iloc[-1])
+        out["rsi_periods"] = RSI_PERIODS
 
     volume = data.prices.get("Volume")
     if volume is not None and not volume.dropna().empty and price:
