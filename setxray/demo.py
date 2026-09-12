@@ -7,6 +7,8 @@ test. Nessun dato qui dentro riguarda una societa' reale della SET.
 
 from __future__ import annotations
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 
@@ -16,7 +18,9 @@ PROFILES: dict[str, str] = {
     "solida": "Azienda in crescita, conti sani, valutazione ragionevole",
     "cara": "Azienda di qualita' ma pagata molto piu' della sua media storica",
     "difficolta": "Ricavi in calo, debito alto, cassa negativa",
-    "dividendo": "Utility stabile a basso rischio con dividendo generoso",
+    "dividendo": "Utility stabile con dividendo generoso e crescente da 10 anni",
+    "tagliato": "Ha tagliato il dividendo nel 2020 e oggi distribuisce quasi tutto l'utile",
+    "irregolare": "Paga solo negli anni buoni: nessuna continuita'",
 }
 
 
@@ -82,6 +86,7 @@ def _params(profile: str) -> dict:
         capex_ratio=0.055, target_pe=10.5, hist_pe=14.5, drift=0.07, vol=0.26,
         name="Siam Sample Industries PCL (DEMO)", sector="Industrials",
         industry="Specialty Industrial Machinery", beta=0.95,
+        dividend_profile="crescita", dividend_growth=0.06, cadence=2,
     )
     if profile == "cara":
         base.update(
@@ -105,8 +110,89 @@ def _params(profile: str) -> dict:
             capex_ratio=0.07, drift=0.02, vol=0.17,
             name="Thai Regional Power PCL (DEMO)", sector="Utilities",
             industry="Utilities - Regulated Electric", beta=0.55,
+            dividend_profile="crescita", dividend_growth=0.035, cadence=2,
         )
+    elif profile == "tagliato":
+        # Il caso che conta davvero per uno strumento sui dividendi: rendimento
+        # alto perche' il mercato si aspetta un altro taglio, non perche' sia
+        # un'occasione.
+        base.update(
+            revenue_growth=-0.01, net_margin=0.055, margin_drift=-0.008,
+            target_pe=7.0, hist_pe=13.0, debt=72e9, cash=7e9, payout=0.95,
+            capex_ratio=0.085, drift=-0.10, vol=0.32,
+            name="Chiang Mai Property Trust PCL (DEMO)", sector="Real Estate",
+            industry="Real Estate - Diversified", beta=1.15,
+            dividend_profile="taglio", dividend_growth=0.02, cadence=2,
+        )
+    elif profile == "irregolare":
+        base.update(
+            revenue_growth=0.02, net_margin=0.08, margin_drift=0.0,
+            target_pe=9.0, hist_pe=11.0, debt=40e9, cash=11e9, payout=0.35,
+            capex_ratio=0.06, drift=0.01, vol=0.34,
+            name="Andaman Marine Services PCL (DEMO)", sector="Industrials",
+            industry="Marine Shipping", beta=1.25,
+            dividend_profile="irregolare", dividend_growth=0.0, cadence=1,
+        )
+    elif profile == "difficolta":
+        base.update(dividend_profile="nessuno")
     return base
+
+
+def _annual_dps(p: dict, dps_ultimo: float) -> dict[int, float]:
+    """Dividendo per azione, anno per anno, dal 2015 al 2026.
+
+    Costruito a ritroso dall'ultimo anno, cosi' il rendimento di oggi resta
+    coerente con il prezzo ancorato al P/E del profilo.
+    """
+    forma = p["dividend_profile"]
+    if forma == "nessuno" or dps_ultimo <= 0:
+        return {}
+    crescita = p["dividend_growth"]
+    anni = list(range(2015, 2027))
+    serie: dict[int, float] = {}
+
+    if forma == "crescita":
+        for anno in anni:
+            serie[anno] = dps_ultimo / (1 + crescita) ** (2025 - anno)
+    elif forma == "taglio":
+        # Cresce fino al 2019, taglio del 55% nel 2020, risalita parziale.
+        picco = dps_ultimo / 0.62
+        for anno in anni:
+            if anno <= 2019:
+                serie[anno] = picco / (1 + 0.07) ** (2019 - anno)
+            elif anno == 2020:
+                serie[anno] = picco * 0.45
+            else:
+                serie[anno] = picco * 0.45 * (1 + 0.065) ** (anno - 2020)
+    elif forma == "irregolare":
+        # Paga solo negli anni buoni: il classico ciclico che distribuisce
+        # quando il ciclo gira e salta quando non gira.
+        saltati = {2016, 2020, 2021, 2024}
+        for anno in anni:
+            serie[anno] = 0.0 if anno in saltati else dps_ultimo * (0.7 + 0.3 * ((anno % 3) / 2))
+    # L'anno in corso e' incompleto: solo la prima parte degli stacchi.
+    if 2026 in serie:
+        serie[2026] = serie[2026] * (1.0 / max(1, p["cadence"]))
+    return {anno: valore for anno, valore in serie.items() if valore > 0}
+
+
+def _dividend_payments(p: dict, dps_ultimo: float) -> Optional[pd.Series]:
+    """Dal dividendo annuale ai singoli stacchi, con le date di stacco."""
+    per_anno = _annual_dps(p, dps_ultimo)
+    if not per_anno:
+        return None
+    cadenza = max(1, int(p["cadence"]))
+    # Stacchi tipici della SET: finale in aprile, interinale a settembre.
+    mesi = {1: [(4, 25)], 2: [(4, 25), (9, 5)], 4: [(2, 20), (5, 15), (8, 14), (11, 13)]}[cadenza]
+    date, importi = [], []
+    for anno, totale in sorted(per_anno.items()):
+        quanti = len(mesi) if anno < 2026 else max(1, len(mesi) - 1)
+        for mese, giorno in mesi[:quanti]:
+            date.append(pd.Timestamp(f"{anno}-{mese:02d}-{giorno:02d}"))
+            importi.append(round(totale / quanti, 4))
+    serie = pd.Series(importi, index=pd.DatetimeIndex(date)).sort_index()
+    serie = serie[serie.index <= pd.Timestamp("2026-09-11")]
+    return serie if not serie.empty else None
 
 
 def build_demo(profile: str = "solida") -> StockData:
@@ -234,22 +320,13 @@ def build_demo(profile: str = "solida") -> StockData:
     else:
         end_price = max(1.0, equity[-1] / shares[-1] * 0.45)
     seed = sum(ord(c) for c in profile) * 37
-    bench, prices = _market_and_stock(end_price, 10, p["drift"], p["vol"], p["beta"], seed)
+    # Undici anni di borsa: le misure a dieci anni hanno bisogno di un punto
+    # di partenza *oltre* i dieci anni, non esattamente a dieci.
+    bench, prices = _market_and_stock(end_price, 11.2, p["drift"], p["vol"], p["beta"], seed)
     prices["AdjClose"] = prices["Close"] * 0.96
     bench["AdjClose"] = bench["Close"]
 
-    # Dividendi semestrali degli ultimi 10 anni.
-    div_index, div_values = [], []
-    for i, year in enumerate(range(2016, 2027)):
-        amount = dps[-1] / (1 + 0.06) ** (2026 - year) if dps[-1] > 0 else 0.0
-        if amount <= 0:
-            continue
-        for month, day in ((4, 25), (9, 5)):
-            if year == 2026 and month > 8:
-                continue
-            div_index.append(pd.Timestamp(f"{year}-{month:02d}-{day:02d}"))
-            div_values.append(round(amount / 2, 4))
-    dividends = pd.Series(div_values, index=pd.DatetimeIndex(div_index)).sort_index()
+    dividends = _dividend_payments(p, dps[-1] if dps else 0.0)
 
     market_cap = end_price * shares[-1]
     info = {
@@ -264,9 +341,14 @@ def build_demo(profile: str = "solida") -> StockData:
             "Nessun dato reale, nessun collegamento con societa' esistenti."
         ),
         "numberOfAnalystOpinions": 9,
-        "recommendationKey": {"solida": "buy", "cara": "hold", "difficolta": "underperform",
-                              "dividendo": "hold"}[profile],
-        "targetMeanPrice": end_price * (1.22 if profile == "solida" else 0.92 if profile == "difficolta" else 1.04),
+        "recommendationKey": {
+            "solida": "buy", "cara": "hold", "difficolta": "underperform",
+            "dividendo": "hold", "tagliato": "hold", "irregolare": "hold",
+        }[profile],
+        "targetMeanPrice": end_price * {
+            "solida": 1.22, "cara": 1.04, "difficolta": 0.92,
+            "dividendo": 1.04, "tagliato": 0.95, "irregolare": 1.08,
+        }[profile],
     }
 
     # Storico dei multipli: centrato sul P/E medio storico del profilo.
@@ -303,7 +385,7 @@ def build_demo(profile: str = "solida") -> StockData:
         income_a=income_a, income_q=income_q, income_ttm=income_ttm,
         balance_a=balance_a, balance_q=balance_q,
         cash_a=cash_a, cash_q=cash_q, cash_ttm=cash_ttm,
-        dividends=dividends if not dividends.empty else None,
+        dividends=dividends,  # None per i profili che non distribuiscono
         analyst_targets={
             "current": end_price, "mean": info["targetMeanPrice"],
             "median": info["targetMeanPrice"] * 0.99,

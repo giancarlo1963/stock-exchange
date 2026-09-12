@@ -21,7 +21,7 @@ class TestCatenaCompleta:
     def test_produce_tutte_le_parti(self, analisi):
         assert analisi.metrics.price > 0
         assert analisi.verdict.action
-        assert set(analisi.narrative) == {"passato", "presente", "futuro"}
+        assert set(analisi.narrative) == {"passato", "presente", "futuro", "dividendi"}
         for paragrafi in analisi.narrative.values():
             assert paragrafi, "ogni sezione ha almeno un paragrafo"
             assert all(isinstance(p, str) and p.strip() for p in paragrafi)

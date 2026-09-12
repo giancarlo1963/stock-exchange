@@ -31,6 +31,77 @@ def _riga(titolo: str) -> str:
     return f"\n{GRASSETTO}{titolo}{SPENTO}\n" + "-" * max(24, len(titolo))
 
 
+def stampa_dividendi(analisi) -> None:
+    """La sezione dividendi: e' la risposta principale dello strumento."""
+    d = analisi.dividends
+    valuta = analisi.metrics.currency
+    print(_riga("Dividendi: dieci anni"))
+    if d is None or not d.pays_dividends:
+        print("  Nessun dividendo registrato per questo titolo nelle fonti disponibili.")
+        for nota in (d.notes if d else []):
+            print(f"  {nota}")
+        return
+
+    segnale, sicurezza, rendimento = d.signal, d.safety, d.yield_stats
+    colore = COLORE_AZIONE.get(segnale.action, "")
+    print(f"\n{colore}{GRASSETTO}  ==> {segnale.headline}{SPENTO}")
+    print(f"  Rendimento oggi              {fmt.pct(rendimento.get('attuale'))}"
+          f"   (mediana storica {fmt.pct(rendimento.get('mediana'))}, "
+          f"percentile {fmt.pct(rendimento.get('percentile'))})")
+    print(f"  Dividendo su base annua      {fmt.money(rendimento.get('dps_indicato'), valuta)}")
+    if d.forecast and d.forecast.ok:
+        print(f"  Stima prossimi 12 mesi       {fmt.money(d.forecast.year1_base, valuta)}"
+              f"   (da {fmt.num(d.forecast.year1_low)} a {fmt.num(d.forecast.year1_high)})")
+    banda = {"solido": VERDE, "da tenere d'occhio": GIALLO, "a rischio": ROSSO}.get(
+        sicurezza.band, "")
+    print(f"  Solidita' del dividendo      {banda}{fmt.num(sicurezza.score, 0)}/100 "
+          f"({sicurezza.band}){SPENTO}, rischio di taglio {sicurezza.cut_risk_band}")
+    print(f"  Rendimento atteso a 2 anni   {fmt.pct(segnale.expected_return_2y, sign=True)}"
+          f"   ({fmt.pct(segnale.income_component, sign=True)} cedole, "
+          f"{fmt.pct(segnale.price_component, sign=True)} prezzo)")
+    etichetta = ("Tornerebbe interessante sotto" if segnale.action == SELL else "Compra sotto")
+    print(f"  {etichetta:28s} {fmt.money(segnale.entry_price, valuta)}"
+          f"   (valore {fmt.num(segnale.fair_price)}, "
+          f"alleggerisci sopra {fmt.num(segnale.exit_price)})")
+
+    crescita, streaks = d.growth, d.streaks
+    print(f"\n  Crescita media del dividendo: 10 anni {fmt.pct(crescita.get('cagr_10y'), sign=True)}"
+          f" · 5 anni {fmt.pct(crescita.get('cagr_5y'), sign=True)}"
+          f" · 3 anni {fmt.pct(crescita.get('cagr_3y'), sign=True)}")
+    print(f"  Anni pagati {streaks.get('anni_pagati')} su {streaks.get('anni_osservati')}"
+          f" · tagli {streaks.get('tagli')}"
+          f" · aumenti consecutivi {streaks.get('aumenti_consecutivi')}")
+    tr = d.total_return
+    if tr.get("totale_reinvestito") is not None:
+        print(f"  In {tr.get('anni', 10):.0f} anni: prezzo "
+              f"{fmt.pct(tr.get('solo_prezzo'), sign=True)}, con dividendi reinvestiti "
+              f"{fmt.pct(tr.get('totale_reinvestito'), sign=True)}")
+
+    print(_riga("Solidita' del dividendo, fattore per fattore"))
+    for fattore in sicurezza.factors:
+        tinta = VERDE if fattore.points > 0 else ROSSO if fattore.points < 0 else ""
+        valore = (fmt.pct(fattore.value) if fattore.fmt == "pct"
+                  else fmt.mult(fattore.value) if fattore.fmt == "x"
+                  else fmt.num(fattore.value, 0))
+        print(f"  {fattore.label:48s} {valore:>9s}  {tinta}{fattore.points:+5.0f}{SPENTO}  "
+              f"{fattore.explanation}")
+
+    print(_riga("Il racconto"))
+    for paragrafo in analisi.narrative.get("dividendi", []):
+        print(f"  {paragrafo}")
+
+    if d.source is not None:
+        print(_riga("Provenienza dei dividendi"))
+        print(f"  {d.source.provenance()}")
+        for risultato in d.source.results:
+            esito = (f"{risultato.payments} stacchi su {risultato.span_years:.1f} anni"
+                     if risultato.ok else (risultato.error or "nessun dato"))
+            marca = " <-- usata" if risultato.key == d.source.chosen else ""
+            print(f"    {risultato.label:28s} {esito}{marca}")
+        for avviso in d.source.disagreements:
+            print(f"  {GIALLO}[attenzione]{SPENTO} {avviso}")
+
+
 def stampa(analisi) -> None:
     m, v, d = analisi.metrics, analisi.valuation, analisi.verdict
     valuta = m.currency
@@ -42,7 +113,7 @@ def stampa(analisi) -> None:
     if analisi.data.is_demo:
         print(f"\n  {GIALLO}DATI DIMOSTRATIVI SINTETICI: societa' inventata, numeri non reali.{SPENTO}")
 
-    print(f"\n{colore}{GRASSETTO}  ==> {d.headline}{SPENTO}")
+    print(f"\n{colore}{GRASSETTO}  ==> {d.headline}{SPENTO}   (analisi fondamentale generale)")
     print(f"      punteggio {fmt.num(d.composite, 0)}/100 · qualita' dei dati: {d.data_quality}")
 
     print(_riga("Numeri chiave"))
@@ -85,6 +156,14 @@ def stampa(analisi) -> None:
     for innesco in d.review_triggers:
         print(f"  · {innesco}")
 
+    dividendi = analisi.dividends
+    if dividendi is not None and dividendi.pays_dividends and dividendi.signal:
+        if dividendi.signal.action != d.action:
+            print(f"\n  {GIALLO}I due modelli non concordano:{SPENTO} sui dividendi "
+                  f"{dividendi.signal.action}, sui fondamentali generali {d.action}. "
+                  "Guardano cose diverse: il primo pesa la sostenibilita' della cedola, "
+                  "il secondo utili e patrimonio.")
+
     print("\n  Elaborazione automatica di dati pubblici: non e' consulenza finanziaria.\n")
 
 
@@ -97,6 +176,10 @@ def main(argv: list[str] | None = None) -> int:
                + ", ".join(f"demo:{p}" for p in PROFILES),
     )
     parser.add_argument("simbolo", nargs="?", help="simbolo SET, per esempio PTT, AOT, CPALL")
+    parser.add_argument("--dividendi", action="store_true",
+                        help="stampa solo l'analisi dei dividendi a dieci anni")
+    parser.add_argument("--fonti", action="store_true",
+                        help="elenca le fonti di dati disponibili ed esce")
     parser.add_argument("--report", metavar="FILE", help="salva il report completo in markdown")
     parser.add_argument("--grafici", metavar="CARTELLA",
                         help="salva i grafici in PNG nella cartella indicata (richiede kaleido)")
@@ -110,6 +193,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--svuota-cache", action="store_true", help="svuota la cache ed esce")
     parser.add_argument("--version", action="version", version=f"setxray {__version__}")
     args = parser.parse_args(argv)
+
+    if args.fonti:
+        from setxray.sources import describe_sources
+
+        print("\nFonti di dati sui dividendi, in ordine di fiducia:\n")
+        for riga in describe_sources():
+            stato = f"{VERDE}attiva{SPENTO}" if riga["attiva"] else f"{GIALLO}inattiva{SPENTO}"
+            print(f"  {'*' * riga['fiducia']:5s} {riga['fonte']:26s} {stato:18s} "
+                  f"chiave: {riga['chiave_api']}")
+            if riga["nota"]:
+                print(f"        {riga['nota']}")
+        print("\n  Puoi limitare le fonti con SETXRAY_SOURCES=csv,yahoo")
+        print("  Il file CSV va in dati/<SIMBOLO>-dividendi.csv con colonne data,importo\n")
+        return 0
 
     if args.svuota_cache:
         print(f"Cache svuotata ({clear_cache()} file).")
@@ -130,7 +227,11 @@ def main(argv: list[str] | None = None) -> int:
               "Yahoo Finance limita il numero di richieste.", file=sys.stderr)
         return 3
 
-    stampa(analisi)
+    if args.dividendi:
+        stampa_dividendi(analisi)
+    else:
+        stampa(analisi)
+        stampa_dividendi(analisi)
 
     if args.report:
         with open(args.report, "w", encoding="utf-8") as file:

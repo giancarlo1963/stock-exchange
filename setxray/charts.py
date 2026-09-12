@@ -512,3 +512,318 @@ def all_charts(analysis, dark: bool = False) -> dict[str, go.Figure]:
         "multiplo_pe": multiple_history_chart(m, "pe", dark),
         "dividendo": dividend_chart(m, dark),
     }
+
+
+# ==========================================================================
+# GRAFICI SUI DIVIDENDI
+# ==========================================================================
+# I colori delle due serie divergenti (punti a favore / contro) sono la coppia
+# blu-rosso documentata per le scale con un segno, con lo zero in grigio: non
+# sono colori di stato, e non vanno confusi con verde/giallo/rosso dei
+# punteggi.
+DIVERGENTE_POSITIVO = {"light": "#2a78d6", "dark": "#3987e5"}
+DIVERGENTE_NEGATIVO = {"light": "#e34948", "dark": "#e66767"}
+
+
+def dividend_history_chart(analisi, dark: bool = False) -> go.Figure:
+    """Dividendo per azione per anno, con i tagli segnati e la previsione."""
+    t = tokens(dark)
+    if analisi is None or not analisi.pays_dividends or analisi.years.empty:
+        return _empty("Nessun dividendo registrato per questo titolo", t, height=300)
+    tabella = analisi.years
+    cur = analisi.currency
+
+    anni = [str(int(a)) for a in tabella.index]
+    valori = tabella["dps"].tolist()
+    completo = tabella["completo"].tolist()
+    variazioni = tabella["variazione"].tolist()
+
+    # Un anno tagliato o saltato si vede subito solo se ha un colore suo: il
+    # taglio del dividendo e' l'evento che conta piu' di tutti in questa serie.
+    colori, etichette = [], []
+    for valore, chiuso, variazione in zip(valori, completo, variazioni):
+        # L'anno in corso va valutato prima di tutto: e' incompleto per
+        # definizione, quindi piu' basso del precedente. Segnalarlo come taglio
+        # sarebbe un falso allarme su ogni titolo, ogni anno.
+        if not chiuso:
+            colori.append(t["muted"]); etichette.append("anno in corso, incompleto")
+        elif valore <= 0:
+            colori.append(t["critical"]); etichette.append("nessun dividendo")
+        elif variazione is not None and variazione == variazione and variazione < -0.02:
+            colori.append(t["critical"]); etichette.append("taglio")
+        else:
+            colori.append(t["s1"]); etichette.append("pagato")
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=anni, y=valori, name="Dividendo pagato",
+        marker=dict(color=colori, cornerradius=4, line=dict(color=t["surface"], width=2)),
+        customdata=etichette,
+        hovertemplate="%{x}: %{y:,.2f} " + cur + " (%{customdata})<extra></extra>",
+    ))
+
+    previsione = analisi.forecast
+    if previsione is not None and previsione.ok:
+        ultimo = int(tabella.index[-1])
+        anni_futuri = [str(ultimo + 1), str(ultimo + 2)]
+        base = [previsione.year1_base, previsione.year2_base]
+        basso = [previsione.year1_low, previsione.year2_low]
+        alto = [previsione.year1_high, previsione.year2_high]
+        fig.add_trace(go.Bar(
+            x=anni_futuri, y=base, name="Previsione",
+            marker=dict(color=t["s3"], cornerradius=4, line=dict(color=t["surface"], width=2)),
+            error_y=dict(type="data", symmetric=False,
+                         array=[a - b for a, b in zip(alto, base)],
+                         arrayminus=[b - l for b, l in zip(base, basso)],
+                         color=t["ink2"], thickness=1.5, width=6),
+            hovertemplate="%{x}: %{y:,.2f} " + cur + " previsto<extra></extra>",
+        ))
+
+    tagli = analisi.streaks.get("tagli") or 0
+    sottotitolo = (f"Barre rosse: anni di taglio o senza dividendo. "
+                   f"{'Nessun taglio' if not tagli else str(tagli) + ' taglio/i'} nel periodo. "
+                   "La barra verde e' la stima dei prossimi due anni, con la sua forchetta.")
+    return _layout(fig, t, title="Dividendo per azione, anno per anno",
+                   subtitle=sottotitolo, height=380, unit=cur)
+
+
+def yield_history_chart(analisi, dark: bool = False) -> go.Figure:
+    """Rendimento nel tempo: il prezzo di oggi e' generoso o caro?"""
+    t = tokens(dark)
+    if analisi is None or analisi.daily_yield is None or analisi.daily_yield.empty:
+        # Riserva: le medie annuali, piu' grossolane ma meglio di niente.
+        if analisi is not None and not analisi.years.empty and analisi.years["rendimento"].notna().any():
+            serie = analisi.years[analisi.years["completo"]]["rendimento"].dropna()
+            if len(serie) >= 3:
+                fig = go.Figure()
+                fig.add_trace(_bar([str(int(a)) for a in serie.index], serie.values,
+                                   "Rendimento medio dell'anno", t["s1"], t, hover_pct=True))
+                return _layout(fig, t, title="Rendimento da dividendo, anno per anno",
+                               subtitle="Dividendo dell'anno sul prezzo medio dello stesso anno "
+                                        "(manca lo storico giornaliero per una serie piu' fine)",
+                               height=320, percent_axis=True)
+        return _empty("Storico del rendimento non disponibile", t, height=300)
+
+    serie = analisi.daily_yield
+    stat = analisi.yield_stats
+    fig = go.Figure()
+    if stat.get("p25") and stat.get("p75"):
+        fig.add_hrect(y0=stat["p25"], y1=stat["p75"], fillcolor=t["band"], line_width=0,
+                      layer="below")
+    fig.add_trace(go.Scatter(
+        x=serie.index, y=serie.values, name="Rendimento", mode="lines",
+        line=dict(color=t["s1"], width=2),
+        hovertemplate="%{x|%m/%Y}: %{y:.2%}<extra></extra>",
+    ))
+    if stat.get("mediana"):
+        fig.add_hline(y=stat["mediana"], line=dict(color=t["ink2"], width=1.5),
+                      annotation_text=f"mediana {fmt.pct(stat['mediana'])}",
+                      annotation_position="top right",
+                      annotation_font=dict(size=11, color=t["ink2"]))
+    attuale = stat.get("attuale")
+    if attuale:
+        colore = t["good"] if attuale > (stat.get("mediana") or 0) else t["critical"]
+        fig.add_hline(y=attuale, line=dict(color=colore, width=2),
+                      annotation_text=f"oggi {fmt.pct(attuale)}",
+                      annotation_position="bottom right",
+                      annotation_font=dict(size=11, color=colore))
+    percentile = stat.get("percentile")
+    coda = ("" if percentile is None else
+            f" Oggi e' piu' generoso del {fmt.pct(percentile)} delle osservazioni.")
+    cadenza = analisi.cadence or 1
+    return _layout(fig, t, title="Rendimento da dividendo nel tempo",
+                   subtitle=f"Dividendo su base annua (gli ultimi {cadenza} stacchi a ogni data) "
+                            "diviso il prezzo di quel giorno. Zona grigia: meta' centrale dei "
+                            f"valori storici.{coda}",
+                   height=340, percent_axis=True)
+
+
+def payout_coverage_chart(analisi, dark: bool = False) -> go.Figure:
+    """Il dividendo e' coperto dagli utili e dalla cassa?"""
+    t = tokens(dark)
+    if analisi is None or analisi.years.empty:
+        return _empty("Dati di copertura non disponibili", t, height=300)
+    completi = analisi.complete_years()
+    if completi.empty:
+        return _empty("Nessun anno completo disponibile", t, height=300)
+    anni = [str(int(a)) for a in completi.index]
+
+    pannelli = []
+    if completi["payout"].notna().any():
+        pannelli.append(("payout", "Quota di utili distribuita", True, 1.0))
+    if completi["copertura_cassa"].notna().any():
+        pannelli.append(("copertura_cassa", "Copertura con la cassa libera", False, 1.0))
+    if not pannelli:
+        return _empty("Copertura non calcolabile: mancano utili o flussi di cassa", t, height=300)
+
+    # Due grandezze, due unita' (percentuale e volte): due riquadri.
+    fig = make_subplots(rows=1, cols=len(pannelli),
+                        subplot_titles=[p[1] for p in pannelli], horizontal_spacing=0.10)
+    for i, (colonna, nome, percentuale, soglia) in enumerate(pannelli, start=1):
+        serie = completi[colonna]
+        # Sopra la soglia il dividendo non e' coperto: il colore lo dice, e la
+        # linea tratteggiata no perche' le linee tratteggiate sono riservate.
+        colori = [t["critical"] if (v is not None and v == v and
+                                    ((percentuale and v > 1.0) or (not percentuale and v < 1.0)))
+                  else t["s1"] for v in serie]
+        fig.add_trace(go.Bar(
+            x=anni, y=serie, width=0.55, showlegend=False, name=nome,
+            marker=dict(color=colori, cornerradius=4, line=dict(color=t["surface"], width=2)),
+            hovertemplate=("%{y:.0%}" if percentuale else "%{y:,.2f}x") + "<extra></extra>",
+        ), row=1, col=i)
+        fig.add_hline(y=soglia, line=dict(color=t["axis"], width=1.5), row=1, col=i)
+        fig.update_yaxes(tickformat=".0%" if percentuale else ".1f", row=1, col=i)
+
+    fig = _layout(fig, t, title="Il dividendo e' coperto?",
+                  subtitle="La linea segna il punto di rottura: sopra il 100% degli utili, o sotto "
+                           "1 volta la cassa libera, il dividendo non e' finanziato dall'attivita'. "
+                           "Le barre rosse sono gli anni in cui e' accaduto.",
+                  height=350)
+    for annotazione in fig.layout.annotations:
+        annotazione.font = dict(size=12, color=t["ink2"], family=FONT)
+        if annotazione.yref == "paper" and annotazione.y and annotazione.y > 0.9:
+            annotazione.y = 0.93
+    fig.update_layout(showlegend=False, margin=dict(l=56, r=24, t=124, b=48))
+    return fig
+
+
+def total_return_chart(analisi, prices, dark: bool = False) -> go.Figure:
+    """Quanto del rendimento e' venuto dalle cedole e quanto dal prezzo."""
+    t = tokens(dark)
+    if analisi is None or prices is None or prices.empty or not analisi.pays_dividends:
+        return _empty("Storico prezzi insufficiente per la scomposizione", t, height=300)
+    chiusure = prices["Close"].dropna()
+    tr = analisi.total_return
+    anni = tr.get("anni") or 10
+    inizio = chiusure.index[-1] - pd.Timedelta(days=int(365.25 * anni))
+    finestra = chiusure[chiusure.index >= inizio]
+    if len(finestra) < 100:
+        return _empty("Storico prezzi insufficiente per la scomposizione", t, height=300)
+
+    solo_prezzo = finestra / finestra.iloc[0] * 100
+    # Ricostruiamo giorno per giorno il valore con le cedole reinvestite.
+    pagamenti = analisi.payments
+    quote = pd.Series(1.0, index=finestra.index)
+    fattore = 1.0
+    nel_periodo = pagamenti[(pagamenti.index >= finestra.index[0])
+                            & (pagamenti.index <= finestra.index[-1])]
+    for data, importo in nel_periodo.items():
+        successivi = finestra.index[finestra.index >= data]
+        if not len(successivi):
+            continue
+        prezzo = float(finestra.loc[successivi[0]])
+        if prezzo > 0:
+            fattore *= 1 + float(importo) / prezzo
+            quote.loc[successivi[0]:] = fattore
+    totale = solo_prezzo * quote
+
+    fig = go.Figure()
+    fig.add_trace(_line(finestra.index, solo_prezzo.values, "Solo prezzo", t["s2"], t, width=1.5))
+    fig.add_trace(_line(finestra.index, totale.values, "Con dividendi reinvestiti", t["s1"], t))
+    for valori, colore, etichetta in ((totale, t["s1"], "con dividendi"),
+                                      (solo_prezzo, t["s2"], "solo prezzo")):
+        fig.add_annotation(x=finestra.index[-1], y=float(valori.iloc[-1]), text=f" {etichetta}",
+                           showarrow=False, xanchor="left", font=dict(size=11, color=colore))
+
+    quota = tr.get("quota_dividendi")
+    coda = ""
+    if quota is not None and 0 < quota <= 1:
+        coda = f" I dividendi sono il {fmt.pct(quota)} del rendimento totale del periodo."
+    elif tr.get("contributo_dividendi") is not None:
+        coda = (f" I dividendi hanno aggiunto "
+                f"{fmt.num(tr['contributo_dividendi'] * 100, 1)} punti percentuali.")
+    return _layout(fig, t, title="Da dove e' venuto il rendimento",
+                   subtitle=f"Entrambe le linee partono da 100 a {anni:.0f} anni fa. La distanza "
+                            f"fra le due e' l'effetto delle cedole reinvestite.{coda}",
+                   height=360, unit="indice = 100")
+
+
+def safety_factors_chart(analisi, dark: bool = False) -> go.Figure:
+    """I punti che compongono il punteggio di solidita', uno per uno."""
+    t = tokens(dark)
+    modo = "dark" if dark else "light"
+    if analisi is None or analisi.safety is None or not analisi.safety.factors:
+        return _empty("Punteggio di solidita' non calcolabile", t, height=300)
+    fattori = [f for f in analisi.safety.factors if f.points != 0]
+    if not fattori:
+        return _empty("Nessun fattore ha inciso sul punteggio", t, height=260)
+    fattori = sorted(fattori, key=lambda f: f.points)
+
+    etichette = [f.label for f in fattori]
+    punti = [f.points for f in fattori]
+    colori = [DIVERGENTE_POSITIVO[modo] if p > 0 else DIVERGENTE_NEGATIVO[modo] for p in punti]
+    testi = [f"{p:+.0f}" for p in punti]
+    spiegazioni = [f.explanation for f in fattori]
+
+    fig = go.Figure(go.Bar(
+        x=punti, y=etichette, orientation="h", width=0.6,
+        marker=dict(color=colori, cornerradius=4, line=dict(color=t["surface"], width=2)),
+        text=testi, textposition="outside", textfont=dict(size=12, color=t["ink"]),
+        customdata=spiegazioni,
+        hovertemplate="%{y}: %{x:+.0f} punti<br>%{customdata}<extra></extra>",
+        showlegend=False,
+    ))
+    fig.add_vline(x=0, line=dict(color=t["axis"], width=1.5))
+    limite = max(abs(min(punti)), abs(max(punti))) * 1.45
+    fig = _layout(fig, t, title="Da dove viene il punteggio di solidita'",
+                  subtitle=f"Si parte da 50 e si arriva a {fmt.num(analisi.safety.score, 0)}. "
+                           "Blu a destra: punti a favore. Rosso a sinistra: punti contro. "
+                           "Passa sopra una barra per la spiegazione.",
+                  height=max(300, 56 * len(fattori) + 130))
+    fig.update_xaxes(range=[-limite, limite], showgrid=True, gridcolor=t["grid"], linewidth=0,
+                     title=dict(text="punti", font=dict(size=11, color=t["muted"])))
+    fig.update_yaxes(showgrid=False, zeroline=False, tickfont=dict(size=12, color=t["ink2"]))
+    fig.update_layout(showlegend=False, hovermode="closest",
+                      margin=dict(l=300, r=60, t=104, b=52))
+    return fig
+
+
+def backtest_chart(analisi, dark: bool = False) -> go.Figure:
+    """Il segnale sul rendimento ha funzionato su questo titolo?"""
+    t = tokens(dark)
+    verifica = analisi.backtest if analisi else None
+    if verifica is None or not verifica.buckets:
+        messaggio = (verifica.note if verifica and verifica.note
+                     else "Verifica retrospettiva non disponibile")
+        return _empty(messaggio, t, height=280)
+    gruppi = [b for b in verifica.buckets if b.observations]
+    if not gruppi:
+        return _empty(verifica.note or "Nessuna osservazione utilizzabile", t, height=280)
+
+    etichette = [b.label.replace(" (segnale di ", "<br>(").replace(")", ")") for b in gruppi]
+    valori = [b.avg_return_2y for b in gruppi]
+    conteggi = [b.observations for b in gruppi]
+    modo = "dark" if dark else "light"
+    colori = [DIVERGENTE_POSITIVO[modo] if (v or 0) >= 0 else DIVERGENTE_NEGATIVO[modo]
+              for v in valori]
+    fig = go.Figure(go.Bar(
+        x=etichette, y=valori, width=0.5,
+        marker=dict(color=colori, cornerradius=4, line=dict(color=t["surface"], width=2)),
+        text=[f"{v:+.0%}" if v is not None else "n/d" for v in valori],
+        textposition="outside", textfont=dict(size=13, color=t["ink"]),
+        customdata=conteggi,
+        hovertemplate="%{x}<br>media 2 anni: %{y:+.1%}<br>%{customdata} osservazioni<extra></extra>",
+        showlegend=False,
+    ))
+    fig.add_hline(y=0, line=dict(color=t["axis"], width=1.5))
+    fig = _layout(fig, t, title="Il segnale ha funzionato su questo titolo?",
+                  subtitle="Rendimento totale medio dei due anni successivi, a seconda di dove "
+                           "stava il rendimento da dividendo rispetto alla propria storia. "
+                           f"{verifica.observations} osservazioni mensili con finestre sovrapposte: "
+                           "un indizio, non una dimostrazione.",
+                  height=360, percent_axis=True)
+    fig.update_layout(showlegend=False, hovermode="closest")
+    return fig
+
+
+def dividend_charts(analysis, dark: bool = False) -> dict[str, go.Figure]:
+    """I sei grafici della scheda dividendi."""
+    d = analysis.dividends
+    return {
+        "dividendi_storia": dividend_history_chart(d, dark),
+        "dividendi_rendimento": yield_history_chart(d, dark),
+        "dividendi_copertura": payout_coverage_chart(d, dark),
+        "dividendi_rendimento_totale": total_return_chart(d, analysis.data.prices, dark),
+        "dividendi_solidita": safety_factors_chart(d, dark),
+        "dividendi_verifica": backtest_chart(d, dark),
+    }

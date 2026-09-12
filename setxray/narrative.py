@@ -366,6 +366,51 @@ def build_report(analysis) -> str:
     add("")
     add(d.position_note)
     add("")
+    div = getattr(analysis, "dividends", None)
+    if div is not None and div.pays_dividends and div.signal:
+        add("## Dividendi: il segnale")
+        add("")
+        add(f"**{div.signal.headline}**")
+        add("")
+        add(f"- Rendimento oggi: {fmt.pct(div.yield_stats.get('attuale'))} "
+            f"(mediana storica {fmt.pct(div.yield_stats.get('mediana'))}, "
+            f"percentile {fmt.pct(div.yield_stats.get('percentile'))})")
+        add(f"- Dividendo per azione su base annua: "
+            f"{fmt.money(div.yield_stats.get('dps_indicato'), cur)}")
+        if div.forecast and div.forecast.ok:
+            add(f"- Stima prossimi 12 mesi: {fmt.money(div.forecast.year1_base, cur)} "
+                f"(fra {fmt.num(div.forecast.year1_low)} e {fmt.num(div.forecast.year1_high)})")
+        add(f"- Solidita' del dividendo: {fmt.num(div.safety.score, 0)}/100 "
+            f"({div.safety.band}), rischio di taglio {div.safety.cut_risk_band}")
+        add(f"- Rendimento atteso a 2 anni: "
+            f"{fmt.pct(div.signal.expected_return_2y, sign=True)} "
+            f"({fmt.pct(div.signal.income_component, sign=True)} di cedole, "
+            f"{fmt.pct(div.signal.price_component, sign=True)} di prezzo)")
+        add(f"- Compra sotto {fmt.money(div.signal.entry_price, cur)}, "
+            f"valore stimato {fmt.money(div.signal.fair_price, cur)}, "
+            f"alleggerisci sopra {fmt.money(div.signal.exit_price, cur)}")
+        add("")
+        for motivo in div.signal.reasons:
+            add(f"- {motivo}")
+        add("")
+        add("### Solidita' del dividendo, fattore per fattore")
+        add("")
+        add("| Fattore | Valore | Punti | Perche' |")
+        add("|---|---|---|---|")
+        for fattore in div.safety.factors:
+            valore = (fmt.pct(fattore.value) if fattore.fmt == "pct"
+                      else fmt.mult(fattore.value) if fattore.fmt == "x"
+                      else fmt.num(fattore.value, 0))
+            add(f"| {fattore.label} | {valore} | {fattore.points:+.0f} | {fattore.explanation} |")
+        add("")
+        if div.source is not None:
+            add(f"*Provenienza dei dividendi: {div.source.provenance()}*")
+            add("")
+            for avviso in div.source.disagreements:
+                add(f"> {avviso}")
+            if div.source.disagreements:
+                add("")
+
     add("## Punteggio per area")
     add("")
     add("| Area | Punteggio | Domanda a cui risponde |")
@@ -374,7 +419,10 @@ def build_report(analysis) -> str:
         score = "n/d" if pillar.score is None else f"{pillar.score:.0f}/100"
         add(f"| {pillar.label} | {score} | {pillar.question} |")
     add("")
-    for title, key in (("Passato", "passato"), ("Presente", "presente"), ("Futuro", "futuro")):
+    for title, key in (("Dieci anni di dividendi", "dividendi"), ("Passato", "passato"),
+                       ("Presente", "presente"), ("Futuro", "futuro")):
+        if key not in analysis.narrative:
+            continue
         add(f"## {title}")
         add("")
         for paragraph in analysis.narrative[key]:
@@ -416,3 +464,231 @@ def build_report(analysis) -> str:
         "finanziaria ne' una raccomandazione personalizzata. Verifica sempre i numeri sui bilanci "
         "ufficiali della societa' e sul sito della Stock Exchange of Thailand prima di investire.")
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+# DIVIDENDI (dieci anni)
+# --------------------------------------------------------------------------
+def dividends(analisi) -> list[str]:
+    """Il racconto dei dividendi: cosa ha pagato, se regge, cosa aspettarsi."""
+    if analisi is None or not analisi.pays_dividends:
+        return ["Nessun dividendo risulta distribuito da questo titolo nelle fonti "
+                "disponibili. Se sai che distribuisce, puoi fornire la storia degli "
+                "stacchi in un file CSV: l'app la usa al posto delle API."]
+
+    out: list[str] = []
+    cur = analisi.currency
+    completi = analisi.complete_years()
+    crescita, streaks = analisi.growth, analisi.streaks
+    rendimento = analisi.yield_stats
+
+    # --- quanto ha pagato -------------------------------------------------
+    anni_osservati = streaks.get("anni_osservati") or len(completi)
+    if not completi.empty:
+        totale = float(completi["dps"].sum())
+        primo, ultimo = int(completi.index[0]), int(completi.index[-1])
+        frase = (f"Negli anni completi dal {primo} al {ultimo} ha distribuito "
+                 f"{fmt.money(totale, cur)} per azione in totale")
+        if analisi.price:
+            frase += (f", cioe' il {fmt.pct(totale / analisi.price)} del prezzo di oggi "
+                      "incassato in cedole")
+        out.append(frase + ".")
+
+    cadenza = {1: "una volta l'anno", 2: "due volte l'anno", 4: "ogni trimestre"}.get(
+        analisi.cadence or 0, "con cadenza variabile")
+    pagati = streaks.get("anni_pagati")
+    saltati = streaks.get("anni_saltati") or 0
+    frase = f"Paga {cadenza}"
+    if pagati is not None and anni_osservati:
+        if saltati == 0:
+            frase += f" e ha pagato in tutti i {anni_osservati} anni completi osservati"
+        else:
+            frase += (f" e ha pagato in {pagati} dei {anni_osservati} anni osservati, "
+                      f"saltandone {saltati}")
+    out.append(frase + ".")
+
+    cagr10 = crescita.get("cagr_10y")
+    cagr5 = crescita.get("cagr_5y")
+    cagr3 = crescita.get("cagr_3y")
+    pezzi = [f"{etichetta} {fmt.pct(valore, sign=True)}"
+             for etichetta, valore in (("su 10 anni", cagr10), ("su 5", cagr5), ("su 3", cagr3))
+             if valore is not None]
+    if pezzi:
+        riferimento = cagr10 if cagr10 is not None else (cagr5 if cagr5 is not None else cagr3)
+        parola = _grade(riferimento, (-0.02, 0.005, 0.04, 0.09),
+                        ("", "in riduzione", "fermo", "in crescita lenta",
+                         "in crescita solida", "in forte crescita"))
+        out.append(f"Il dividendo per azione e' {parola}: crescita media annua "
+                   + ", ".join(pezzi) + ".")
+
+    tagli = streaks.get("tagli")
+    if tagli:
+        peggiore = streaks.get("taglio_massimo")
+        anno_taglio = streaks.get("anno_ultimo_taglio")
+        frase = f"Ha ridotto il dividendo {tagli} volt" + ("a" if tagli == 1 else "e")
+        if peggiore is not None:
+            frase += f", con un taglio massimo del {fmt.pct(abs(peggiore))}"
+        if anno_taglio:
+            frase += f"; l'ultimo nel {anno_taglio}"
+            dal = streaks.get("anni_dall_ultimo_taglio")
+            if dal:
+                frase += f", {dal} anni fa"
+        out.append(frase + ".")
+    elif anni_osservati:
+        out.append(f"Non ha mai ridotto il dividendo nei {anni_osservati} anni osservati.")
+    aumenti = streaks.get("aumenti_consecutivi")
+    dal_taglio = streaks.get("anni_dall_ultimo_taglio")
+    if aumenti and aumenti >= 3:
+        if tagli and dal_taglio is not None and aumenti >= dal_taglio:
+            # Gli aumenti partono dal minimo post-taglio: chiamarlo "percorso di
+            # crescita" darebbe un'impressione sbagliata a chi legge di fretta.
+            out.append(f"Gli ultimi {aumenti} anni sono di aumento, ma partono dal minimo "
+                       "successivo al taglio: e' una risalita, non ancora un ritorno ai "
+                       "livelli precedenti.")
+        else:
+            out.append(f"Sono {aumenti} anni consecutivi di aumento: e' il tipo di percorso "
+                       "che fa crescere il rendimento sul prezzo pagato.")
+
+    # --- quanto contava il dividendo nel rendimento -----------------------
+    tr = analisi.total_return
+    if tr.get("totale_reinvestito") is not None and tr.get("solo_prezzo") is not None:
+        anni = tr.get("anni") or 10
+        frase = (f"In {anni:.0f} anni il prezzo ha fatto {fmt.pct(tr['solo_prezzo'], sign=True)}, "
+                 f"mentre con i dividendi reinvestiti il rendimento totale e' stato "
+                 f"{fmt.pct(tr['totale_reinvestito'], sign=True)}")
+        if tr.get("annualizzato") is not None:
+            frase += f" ({fmt.pct(tr['annualizzato'], sign=True)} all'anno)"
+        out.append(frase + ".")
+        quota = tr.get("quota_dividendi")
+        contributo = tr.get("contributo_dividendi")
+        if contributo is not None:
+            if quota is not None and 0 < quota <= 1:
+                out.append(f"I dividendi hanno aggiunto {fmt.num(contributo * 100, 1)} punti "
+                           f"percentuali, cioe' il {fmt.pct(quota)} di tutto il rendimento: "
+                           "su questo titolo la cedola e' la parte principale del ritorno."
+                           if quota >= 0.5 else
+                           f"I dividendi hanno aggiunto {fmt.num(contributo * 100, 1)} punti "
+                           f"percentuali, il {fmt.pct(quota)} del rendimento totale.")
+            elif tr["solo_prezzo"] < 0:
+                totale = tr.get("totale_reinvestito")
+                if totale is not None and totale < 0:
+                    out.append(f"I dividendi hanno aggiunto {fmt.num(contributo * 100, 1)} punti "
+                               "percentuali, ma non sono bastati: il periodo resta in perdita "
+                               "anche incassando tutte le cedole. Hanno attenuato il danno, "
+                               "non evitato.")
+                else:
+                    out.append(f"I dividendi hanno aggiunto {fmt.num(contributo * 100, 1)} punti "
+                               "percentuali e hanno ribaltato in positivo un periodo in cui il "
+                               "prezzo e' sceso.")
+
+    yoc = analisi.yield_on_cost
+    if yoc.get("10y"):
+        out.append(f"Chi lo ha comprato dieci anni fa a {fmt.money(yoc.get('prezzo_10y'), cur)} "
+                   f"oggi incassa un {fmt.pct(yoc['10y'])} sul prezzo pagato.")
+    elif yoc.get("5y"):
+        out.append(f"Chi lo ha comprato cinque anni fa a {fmt.money(yoc.get('prezzo_5y'), cur)} "
+                   f"oggi incassa un {fmt.pct(yoc['5y'])} sul prezzo pagato.")
+
+    # --- il prezzo di oggi e' generoso? -----------------------------------
+    attuale, mediana = rendimento.get("attuale"), rendimento.get("mediana")
+    if attuale and mediana:
+        percentile = rendimento.get("percentile")
+        frase = (f"Oggi il titolo rende {fmt.pct(attuale)} (dividendo indicato "
+                 f"{fmt.money(rendimento.get('dps_indicato'), cur)}), contro una mediana storica "
+                 f"di {fmt.pct(mediana)}")
+        if percentile is not None:
+            if percentile >= 0.75:
+                frase += (f": e' piu' generoso del {fmt.pct(percentile)} delle osservazioni degli "
+                          "ultimi anni, quindi il prezzo e' basso rispetto alla sua storia")
+            elif percentile <= 0.25:
+                frase += (f": solo il {fmt.pct(percentile)} delle osservazioni e' stato piu' basso, "
+                          "quindi il titolo e' caro rispetto alla sua storia")
+            else:
+                frase += f", in linea con il passato (percentile {fmt.pct(percentile)})"
+        out.append(frase + ".")
+        if rendimento.get("p25") and rendimento.get("p75"):
+            out.append(f"Nel periodo osservato il rendimento si e' mosso fra "
+                       f"{fmt.pct(rendimento['p25'])} e {fmt.pct(rendimento['p75'])} nella meta' "
+                       f"centrale dei casi, con un minimo di {fmt.pct(rendimento.get('minimo'))} "
+                       f"e un massimo di {fmt.pct(rendimento.get('massimo'))}.")
+
+    # --- il dividendo regge? ---------------------------------------------
+    sicurezza = analisi.safety
+    if sicurezza:
+        out.append(f"Solidita' del dividendo: {fmt.num(sicurezza.score, 0)} su 100, "
+                   f"giudizio \"{sicurezza.band}\", rischio di taglio {sicurezza.cut_risk_band}. "
+                   "Il punteggio nasce dai fattori elencati nella tabella: puoi vedere quanti "
+                   "punti porta ognuno e non essere d'accordo su uno di essi.")
+        pesanti = sorted(sicurezza.factors, key=lambda f: f.points)[:2]
+        negativi = [f for f in pesanti if f.points < 0]
+        if negativi:
+            out.append("I fattori che pesano di piu' in negativo: "
+                       + "; ".join(f"{f.label.lower()} ({f.explanation})" for f in negativi) + ".")
+        positivi = sorted(sicurezza.factors, key=lambda f: -f.points)[:2]
+        positivi = [f for f in positivi if f.points > 0]
+        if positivi:
+            out.append("A favore: "
+                       + "; ".join(f"{f.label.lower()} ({f.explanation})" for f in positivi) + ".")
+        for innesco in sicurezza.hard_triggers:
+            out.append(innesco)
+
+    # --- cosa pagherà -----------------------------------------------------
+    previsione = analisi.forecast
+    if previsione and previsione.ok:
+        frase = (f"Per i prossimi dodici mesi la stima e' {fmt.money(previsione.year1_base, cur)} "
+                 f"per azione (fra {fmt.num(previsione.year1_low)} e "
+                 f"{fmt.num(previsione.year1_high)}), e {fmt.money(previsione.year2_base, cur)} "
+                 "l'anno successivo")
+        if analisi.price:
+            frase += (f": sul prezzo di oggi sono {fmt.pct(previsione.year1_base / analisi.price)} "
+                      "il primo anno")
+        out.append(frase + ".")
+        usati = [m for m in previsione.methods if m.usable]
+        if usati:
+            out.append("La stima incrocia " + str(len(usati)) + " metod"
+                       + ("o" if len(usati) == 1 else "i") + ": "
+                       + "; ".join(f"{m.label.lower()} ({m.detail})" for m in usati) + ".")
+        if previsione.note:
+            out.append(previsione.note)
+
+    # --- il segnale ha funzionato qui? ------------------------------------
+    verifica = analisi.backtest
+    if verifica and verifica.observations >= 24:
+        alto = next((b for b in verifica.buckets
+                     if b.label.startswith("Rendimento alto")), None)
+        basso = next((b for b in verifica.buckets
+                      if b.label.startswith("Rendimento basso")), None)
+        magro = [b for b in (alto, basso) if b is not None and b.observations < 6]
+        if magro:
+            # Confrontare una media su una o due osservazioni con una su
+            # cinquanta e' peggio che non confrontare niente.
+            nomi = " e ".join(b.label.split(" (")[0].lower() for b in magro)
+            out.append(f"La verifica retrospettiva non e' conclusiva: il gruppo "
+                       f"\"{nomi}\" ha troppo poche osservazioni "
+                       f"({', '.join(str(b.observations) for b in magro)}) per essere "
+                       "confrontato. In questi dieci anni il rendimento del titolo e' stato "
+                       "quasi sempre nella stessa fascia.")
+        elif alto and basso and alto.avg_return_2y is not None and basso.avg_return_2y is not None:
+            out.append(
+                f"Verifica sui dati di questo titolo: nelle {alto.observations} occasioni in cui il "
+                f"rendimento era fra i piu' alti della sua storia, i due anni successivi hanno reso "
+                f"in media {fmt.pct(alto.avg_return_2y, sign=True)}; nelle {basso.observations} "
+                f"occasioni in cui era fra i piu' bassi, {fmt.pct(basso.avg_return_2y, sign=True)}."
+            )
+            differenza = verifica.separation
+            if differenza is not None and not magro:
+                if differenza > 0.10:
+                    out.append(f"La differenza fra i due casi e' di {fmt.num(differenza * 100, 0)} "
+                               "punti percentuali a favore del rendimento alto: su questo titolo la "
+                               "regola ha funzionato.")
+                elif differenza < -0.10:
+                    out.append(f"La differenza e' di {fmt.num(abs(differenza) * 100, 0)} punti "
+                               "percentuali *contro* il rendimento alto: su questo titolo comprare "
+                               "quando la cedola era generosa non ha pagato.")
+                else:
+                    out.append("La differenza fra i due casi e' piccola: su questo titolo il livello "
+                               "del rendimento non ha distinto bene i momenti buoni da quelli cattivi.")
+        out.append(verifica.note)
+    elif verifica and verifica.note:
+        out.append(verifica.note)
+    return out

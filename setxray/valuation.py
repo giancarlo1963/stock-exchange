@@ -416,7 +416,12 @@ def value_company(metrics: Metrics, *, risk_free: float = RISK_FREE_TH,
         if valuation.fair_base:
             denominator = 1 + TARGET_TOTAL_RETURN - dy * HORIZON_YEARS
             if denominator > 0.1:
-                valuation.entry_price = valuation.fair_base / denominator
+                # Con un dividendo molto alto le cedole da sole coprono
+                # l'obiettivo, e la formula produce un prezzo d'ingresso sopra
+                # il valore stimato: comprare sopra il valore non e' mai un
+                # consiglio sensato, quindi il valore resta il tetto.
+                valuation.entry_price = min(valuation.fair_base,
+                                            valuation.fair_base / denominator)
 
     valuation.analyst_target = metrics.estimates.get("target_mean")
     valuation.analyst_upside = metrics.estimates.get("target_upside")
