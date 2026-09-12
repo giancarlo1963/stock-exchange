@@ -25,6 +25,7 @@ from setxray.scoring import BUY, HOLD, SELL
 from setxray.sources import describe_sources
 from setxray.sources.probe import probe, prova_indirizzo as try_endpoint, riassunto
 from setxray.sources.settrade import pagina as settrade_page
+from setxray.screener import Criteri, screen
 
 # La lingua si fissa prima di ogni altra cosa: da qui in giu' ogni L() la
 # legge, compreso il titolo della pagina. Sta nell'indirizzo (?lang=it) perche'
@@ -106,6 +107,20 @@ def _analyze_cached(symbol: str, risk_free: float, erp: float, lang: str) -> Ana
     """
     set_language(lang)
     return analyze(symbol, risk_free=risk_free, erp=erp)
+
+
+@st.cache_data(show_spinner=False, ttl=12 * 3600)
+def _setaccio_cached(rendimento: float, sicurezza: float, quanti: int,
+                     escludi: tuple[str, ...], lang: str):
+    """Una passata sul mercato per combinazione di criteri, tenuta mezza giornata.
+
+    Setacciare costa minuti di rete: nessuno deve pagarli due volte per aver
+    cambiato scheda. La lingua entra nella chiave perche' i motivi e i motivi
+    dello scarto nascono dentro il risultato.
+    """
+    set_language(lang)
+    return screen(Criteri(rendimento_minimo=rendimento, sicurezza_minima=sicurezza,
+                          escludi=frozenset(escludi)), limite=quanti)
 
 
 def card(label: str, value: str, note: str = "", colour: str = "") -> str:
@@ -586,7 +601,8 @@ schede = st.tabs([L("Dividends (10 years)",
                   L("Score detail",
                     "Dettaglio dei punteggi"), L("Tables",
                                                                  "Tabelle"), L("Data sources",
-                                                                                         "Fonti dei dati")])
+                                                                                         "Fonti dei dati"),
+                  L("Find stocks", "Cerca titoli")])
 
 with schede[0]:
     if segnale is None:
@@ -873,6 +889,107 @@ with schede[5]:
                                  "Voce"): list(sintesi), L("Value",
                                                                    "Valore"): list(sintesi.values())}),
                  use_container_width=True, hide_index=True)
+
+with schede[7]:
+    st.markdown(L("#### Is there anything else worth buying today?",
+                  "#### C'e' altro che valga la pena comprare oggi?"))
+    st.caption(L("The same criteria used to judge what you already hold, applied to the whole "
+                 "exchange. Two stages: Yahoo filters on dividend yield server-side, then every "
+                 "survivor gets the full analysis - yield against its own ten-year history, "
+                 "safety score, cut risk, payout, years paid without interruption.",
+                 "Gli stessi criteri con cui si giudica quello che hai gia', applicati a tutta "
+                 "la borsa. Due stadi: Yahoo filtra sul rendimento lato server, poi ogni "
+                 "sopravvissuto passa l'analisi completa - rendimento contro la propria storia "
+                 "decennale, punteggio di sicurezza, rischio di taglio, payout, anni di stacchi "
+                 "ininterrotti."))
+    st.warning(L("**It takes several minutes.** One full analysis per stock, with a pause "
+                 "between them because Yahoo does not answer bursts. The result is kept for "
+                 "twelve hours, so a second look is instant.",
+                 "**Ci vogliono alcuni minuti.** Un'analisi completa per titolo, con una pausa "
+                 "fra una e l'altra perche' Yahoo non risponde alle raffiche. Il risultato "
+                 "resta in cache dodici ore, quindi guardarlo di nuovo e' immediato."),
+               icon="⏳")
+
+    tre = st.columns(3)
+    _rend = tre[0].slider(L("Minimum yield", "Rendimento minimo"), 2.0, 10.0, 4.0, 0.5,
+                          format="%.1f%%", key="setaccio-rend") / 100
+    _sic = tre[1].slider(L("Minimum safety", "Sicurezza minima"), 30, 90, 60, 5,
+                         key="setaccio-sic")
+    _quanti = tre[2].slider(L("How many to analyse", "Quanti analizzarne"), 10, 60, 30, 10,
+                            key="setaccio-quanti",
+                            help=L("Each one costs a few seconds of network.",
+                                   "Ognuno costa qualche secondo di rete."))
+    _salta_mie = st.checkbox(L("Leave out what I already hold",
+                               "Escludi quello che ho gia' in portafoglio"),
+                             value=True, key="setaccio-salta")
+    _mie = st.text_input(L("Symbols already held, comma separated",
+                           "Sigle che hai in portafoglio, separate da virgola"),
+                         key="setaccio-mie",
+                         placeholder="BBL, SCB, PTT, KBANK, ...",
+                         disabled=not _salta_mie)
+
+    if st.button(L("Sweep the exchange", "Setaccia la borsa"), type="primary",
+                 use_container_width=True, key="setaccio-vai"):
+        escludi = tuple(sorted({p.strip().upper().replace(".BK", "")
+                                for p in _mie.replace(";", ",").split(",")
+                                if p.strip()})) if _salta_mie else ()
+        with st.spinner(L(f"Analysing up to {_quanti} stocks, one at a time...",
+                          f"Analizzo fino a {_quanti} titoli, uno per volta...")):
+            st.session_state["setaccio"] = _setaccio_cached(_rend, float(_sic), _quanti,
+                                                            escludi, _LINGUA)
+
+    _ris = st.session_state.get("setaccio")
+    if _ris is not None:
+        st.caption(L(f"{_ris.universo} symbols on the exchange · {_ris.preselezionati} "
+                     f"pre-selected · {_ris.esaminati} fully analysed in {_ris.secondi:.0f}s",
+                     f"{_ris.universo} simboli alla borsa · {_ris.preselezionati} "
+                     f"preselezionati · {_ris.esaminati} analizzati a fondo in "
+                     f"{_ris.secondi:.0f}s"))
+        for nota in _ris.note:
+            st.caption(f"· {nota}")
+        migliori = _ris.migliori(15)
+        if not migliori:
+            st.info(L("No stock passes these criteria today. Loosening the yield threshold by "
+                      "half a point usually changes the answer more than any other knob.",
+                      "Nessun titolo passa questi criteri oggi. Abbassare la soglia di "
+                      "rendimento di mezzo punto cambia la risposta piu' di ogni altra "
+                      "manopola."), icon="🔍")
+        else:
+            st.markdown(L(f"##### {len(_ris.candidati)} titoli passano · i migliori "
+                          f"{len(migliori)}",
+                          f"##### {len(_ris.candidati)} titoli passano · i migliori "
+                          f"{len(migliori)}"))
+            st.dataframe(pd.DataFrame([{
+                L("Symbol", "Sigla"): c.symbol,
+                L("Score", "Punti"): round(c.punteggio),
+                L("Yield", "Rendimento"): fmt.pct(c.rendimento),
+                L("vs its history", "vs la sua storia"): fmt.pct(c.percentile, 0),
+                L("Safety", "Sicurezza"): f"{c.sicurezza:.0f}/100" if c.sicurezza else "",
+                L("Years paid", "Anni pagati"): c.anni_pagati,
+                L("Payout", "Payout"): fmt.pct(c.payout, 0),
+                L("Verdict", "Verdetto"): action_label(c.azione) if c.azione else "",
+                L("Company", "Societa'"): c.name,
+            } for c in migliori]), use_container_width=True, hide_index=True)
+            for c in migliori[:6]:
+                if c.motivi:
+                    st.markdown(f"**{c.symbol}** — " + " · ".join(c.motivi))
+        if _ris.scartati:
+            with st.expander(L(f"Left out ({len(_ris.scartati)}), and why",
+                               f"Scartati ({len(_ris.scartati)}), e perche'")):
+                st.caption(L("A criterion is arguable. Knowing that a stock was left out for a "
+                             "payout above earnings is different from knowing it has only paid "
+                             "for two years - and lets you disagree without redoing the work.",
+                             "Un criterio si puo' discutere. Sapere che un titolo e' stato "
+                             "escluso per payout sopra gli utili e' diverso da sapere che paga "
+                             "da due anni - e permette di dissentire senza rifare il lavoro."))
+                st.dataframe(pd.DataFrame([{
+                    L("Symbol", "Sigla"): c.symbol,
+                    L("Left out because", "Escluso perche'"): c.scartato,
+                    L("Company", "Societa'"): c.name,
+                } for c in sorted(_ris.scartati, key=lambda c: c.symbol)]),
+                    use_container_width=True, hide_index=True)
+    else:
+        st.caption(L("Nothing swept yet.", "Non hai ancora setacciato niente."))
 
 with schede[6]:
     st.markdown(L("#### Where the dividends come from", "#### Da dove arrivano i dividendi"))

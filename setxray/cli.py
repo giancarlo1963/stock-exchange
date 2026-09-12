@@ -331,6 +331,85 @@ def print_probe(symbol: str | None, indirizzo: str) -> int:
     return 0
 
 
+def print_screen(args) -> int:
+    """Setaccia il mercato e stampa i candidati, con il motivo degli scarti.
+
+    Dura minuti, non secondi: per ogni titolo dell'elenco preselezionato gira
+    l'analisi completa, e fra una e l'altra c'e' una pausa perche' Yahoo non
+    risponde alle raffiche. L'avanzamento si stampa mentre va: una passata
+    silenziosa di dieci minuti sembra un programma bloccato.
+    """
+    from setxray.screener import Criteri, screen, simboli_da_file
+
+    escludi = simboli_da_file(args.exclude) if args.exclude else frozenset()
+    criteri = Criteri(rendimento_minimo=args.min_yield / 100,
+                      sicurezza_minima=args.min_safety,
+                      escludi=escludi)
+    print()
+    print(f"{BOLD}" + L("Screening the SET for dividend stocks",
+                        "Setaccio la SET in cerca di titoli da dividendo") + f"{OFF}")
+    for riga in criteri.descrizione():
+        print(f"  · {riga}")
+    if escludi:
+        print("  · " + L(f"leaving out {len(escludi)} symbols already held",
+                         f"escludo {len(escludi)} sigle gia' in portafoglio"))
+    print()
+
+    def avanzamento(fatti: int, totali: int, sigla: str) -> None:
+        print(f"\r  [{fatti + 1:3d}/{totali}] {sigla:12s}", end="", file=sys.stderr, flush=True)
+
+    risultato = screen(criteri, avanzamento=avanzamento)
+    print("\r" + " " * 40, end="\r", file=sys.stderr)
+
+    for nota in risultato.note:
+        print(f"  {nota}")
+    print()
+    print(L(f"  {risultato.universo} symbols on the exchange, {risultato.preselezionati} "
+            f"pre-selected, {risultato.esaminati} fully analysed in {risultato.secondi:.0f}s",
+            f"  {risultato.universo} simboli alla borsa, {risultato.preselezionati} "
+            f"preselezionati, {risultato.esaminati} analizzati a fondo in "
+            f"{risultato.secondi:.0f}s"))
+    print()
+
+    migliori = risultato.migliori(args.top)
+    if not migliori:
+        print(f"{AMBER}" + L("No stock passes these criteria today.",
+                             "Nessun titolo passa questi criteri oggi.") + f"{OFF}")
+    else:
+        print(f"{BOLD}" + L(f"{len(risultato.candidati)} stocks pass. The best "
+                            f"{len(migliori)}:",
+                            f"{len(risultato.candidati)} titoli passano. I migliori "
+                            f"{len(migliori)}:") + f"{OFF}")
+        print()
+        print("  " + L(f"{'symbol':10s}{'score':>6s}{'yield':>8s}{'vs history':>12s}"
+                       f"{'safety':>8s}{'years':>7s}{'payout':>8s}  name",
+                       f"{'sigla':10s}{'punti':>6s}{'rend.':>8s}{'vs storia':>12s}"
+                       f"{'sicur.':>8s}{'anni':>7s}{'payout':>8s}  nome"))
+        for c in migliori:
+            colore = GREEN if c.punteggio >= 70 else (AMBER if c.punteggio >= 55 else "")
+            print(f"  {colore}{c.symbol:10s}{c.punteggio:6.0f}"
+                  f"{fmt.pct(c.rendimento):>8s}"
+                  f"{fmt.pct(c.percentile, 0) if c.percentile is not None else '-':>12s}"
+                  f"{c.sicurezza or 0:6.0f}/100"
+                  f"{c.anni_pagati or 0:7d}"
+                  f"{fmt.pct(c.payout, 0):>8s}  {(c.name or '')[:34]}{OFF}")
+            if c.motivi:
+                print(f"  {'':10s}" + " · ".join(c.motivi))
+        print()
+
+    scartati = sorted(risultato.scartati, key=lambda c: c.symbol)
+    if scartati:
+        print(f"{BOLD}" + L(f"Left out ({len(scartati)}), and why:",
+                            f"Scartati ({len(scartati)}), e perche':") + f"{OFF}")
+        for c in scartati:
+            print(f"  {c.symbol:12s} {c.scartato}")
+        print()
+    print(L("  The criteria are arguable: change them with --min-yield and --min-safety.",
+            "  I criteri sono discutibili: si cambiano con --min-yield e --min-safety."))
+    print()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     lingua = _lingua_da_argv(argv)
     parser = argparse.ArgumentParser(
@@ -376,6 +455,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lang", choices=list(CODES), default=lingua,
                         help=L(f"interface language (default {lingua}, or SETXRAY_LANG)",
                                f"lingua dell'interfaccia (predefinita {lingua}, o SETXRAY_LANG)"))
+    parser.add_argument("--screen", action="store_true",
+                        help=L("sweep the whole SET for dividend stocks that pass the criteria",
+                               "setaccia tutta la SET in cerca di titoli da dividendo che "
+                               "passano i criteri"))
+    parser.add_argument("--min-yield", type=float, default=4.0, metavar="PERCENT",
+                        help=L("minimum dividend yield for --screen (default 4.0)",
+                               "rendimento minimo per --screen (predefinito 4.0)"))
+    parser.add_argument("--min-safety", type=float, default=60.0, metavar="PUNTI",
+                        help=L("minimum dividend safety score for --screen (default 60)",
+                               "punteggio minimo di sicurezza per --screen (predefinito 60)"))
+    parser.add_argument("--exclude", metavar="FILE",
+                        help=L("file of symbols to leave out of --screen, one per line or the "
+                               "first column of a CSV",
+                               "file con le sigle da escludere da --screen, una per riga o "
+                               "prima colonna di un CSV"))
+    parser.add_argument("--top", type=int, default=15, metavar="N",
+                        help=L("how many candidates to print (default 15)",
+                               "quanti candidati stampare (predefinito 15)"))
     parser.add_argument("--probe", nargs="?", const="", metavar=L("ENDPOINT", "INDIRIZZO"),
                         help=L("try the SET and Settrade endpoints for the symbol and say what "
                                "each one answers; with an address, try that one",
@@ -409,6 +506,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.probe is not None:
         return print_probe(args.symbol, args.probe)
+
+    if args.screen:
+        return print_screen(args)
 
     if args.clear_cache:
         print(L(f"Cache cleared ({clear_cache()} files).",

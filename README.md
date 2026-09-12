@@ -165,6 +165,58 @@ export SETXRAY_SOURCES=csv,yahoo    # restrict the sources (faster)
 python -m setxray --sources          # check what is active
 ```
 
+### Sweeping the exchange for what to buy (the screener)
+
+Judging what you already hold is half the job; the other half is "is there
+anything else worth buying today". That question needs today's market data on
+~800 stocks, and brute force — download everything about everyone — means
+thousands of Yahoo calls, which after a few dozen start coming back as empty
+tables and make the market look deserted.
+
+So, two stages:
+
+1. **A wide net, cheaply.** Yahoo's screener filters server-side: ask it for Thai
+   SET stocks yielding above the threshold and one request comes back with a
+   short list. If that route breaks — the screener changes, the field names
+   change — it falls back to the full symbol list and filters locally.
+2. **The real exam, only on the survivors.** Each one gets the full analysis:
+   yield against its own ten-year history, the seven-factor safety score, cut
+   risk, payout, years paid without interruption.
+
+```bash
+python -m setxray --screen                      # the default criteria
+python -m setxray --screen --min-yield 5 --min-safety 70
+python -m setxray --screen --exclude data/mie.csv --top 20
+```
+
+The criteria are the rules of the strategy report, written in code — because a
+criterion applied by hand to 800 stocks is not a criterion, it's an opinion:
+
+| passes if | default |
+|---|---|
+| dividend yield | at least 4% |
+| dividend safety | at least 60/100 |
+| years paid without interruption | at least 3 |
+| payout on earnings | at most 100% |
+| cut risk | not "high" |
+| cuts in ten years | at most 1 |
+
+Each candidate gets a 0-100 score from four parts you can read separately:
+yield (40), safety (30), continuity (15), and how cheap it is against its own
+history (15), minus 5 points per past cut, capped at 15. A 30% yield scores no
+better than an 8% one — above that line a high yield is a warning, not a
+result.
+
+**The discards stay in the result, with the reason.** A stock left out "for a
+payout at 130%" says something different from one left out "because it has only
+paid for two years", and the reader has to be able to disagree with a criterion
+without redoing the work. `--exclude` takes a file of symbols you already own,
+one per line or the first column of a CSV, so the tool doesn't recommend what
+you've already got.
+
+The same thing lives in the app under *Find stocks*, with sliders for the
+thresholds; a sweep takes minutes, so the result is cached for twelve hours.
+
 ### Checking the endpoints yourself (the probe)
 
 Neither the SET nor Settrade publishes a documented API for outside use. The
@@ -448,12 +500,13 @@ setxray/
   universe.py          every symbol on the exchange: three routes plus a fallback
   lang.py              the language: one choice, two words for every sentence
   sources/probe.py     tries the SET and Settrade endpoints and says what answers
+  screener.py          sweeps the exchange for stocks that pass the criteria
   cli.py · demo.py · fmt.py
 mobile/setxray.html    the phone preview: one static page, hand-drawn SVG charts
 tools/export_preview.py  runs the engine on the demo profiles -> mobile/dati.js
 tools/dump_strings.py    prints every string the app shows, in one language
 tools/check_languages.py compares the two languages and reports what lags behind
-tests/                 401 tests, all runnable without a network
+tests/                 425 tests, all runnable without a network
 ```
 
 The phone preview is a static page, so it cannot run Python: the engine's output
