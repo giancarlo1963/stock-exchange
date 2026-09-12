@@ -266,7 +266,8 @@ class SourceSpec:
 
 def _registro() -> list[SourceSpec]:
     """Import ritardato: ogni fonte tira dentro solo cio' che le serve."""
-    from setxray.sources import alphavantage, csvfile, eodhd, fmp, setofficial, yahoo
+    from setxray.sources import (alphavantage, csvfile, eodhd, fmp, setofficial, settrade,
+                                 yahoo)
 
     return [
         SourceSpec("set", L("SET (official website)",
@@ -274,6 +275,14 @@ def _registro() -> list[SourceSpec]:
                    L("the authoritative source; its public interface is undocumented, so "
                      "check the result on first use",
                      "fonte autorevole; interfaccia pubblica non documentata, "
+                     "verificane l'esito al primo uso")),
+        SourceSpec("settrade", L("Settrade (SET trading platform)",
+                                 "Settrade (piattaforma della SET)"), 5, None,
+                   settrade.dividends,
+                   L("where Thai retail actually reads its dividend tables; same caveat as "
+                     "the SET site - undocumented interface, check the result on first use",
+                     "dove il retail thailandese legge davvero le tabelle degli stacchi; "
+                     "stessa avvertenza del sito SET - interfaccia non documentata, "
                      "verificane l'esito al primo uso")),
         SourceSpec("csv", L("Local CSV file", "File CSV locale"), 5, None, csvfile.dividends,
                    L("data/<SYMBOL>-dividends.csv with date,dividend columns",

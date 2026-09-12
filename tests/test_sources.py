@@ -336,3 +336,100 @@ class TestSitoSet:
         with pytest.raises(FetchError):
             setofficial.dividends("PTT")
         assert len(tentativi) >= 3, "un indirizzo sbagliato non esclude gli altri"
+
+
+class TestSettrade:
+    """Settrade: la piattaforma della SET, stessa avvertenza del sito SET.
+
+    Nessuno di questi indirizzi e' stato confermato contro il servizio vivo:
+    dall'ambiente in cui il modulo e' stato scritto la rete verso i siti di
+    mercato e' bloccata. Le prove qui coprono il comportamento che conta
+    comunque - l'ordine dei tentativi, la resa quando la forma cambia, e il
+    fatto che un errore finisca nel racconto invece di sparire.
+    """
+
+    def test_prova_piu_indirizzi(self):
+        from setxray.sources import settrade
+
+        indirizzi = settrade.endpoints()
+        assert len(indirizzi) >= 3
+        assert all("{symbol}" in indirizzo for indirizzo in indirizzi)
+        assert all("settrade.com" in indirizzo for indirizzo in indirizzi)
+
+    def test_indirizzo_imposto_dall_utente_ha_la_precedenza(self, monkeypatch):
+        """Chi trova l'indirizzo giusto lo impone senza toccare il codice."""
+        from setxray.sources import settrade
+
+        monkeypatch.setenv("SETXRAY_SETTRADE_API", "https://esempio.invalido/{symbol}")
+        assert settrade.endpoints()[0] == "https://esempio.invalido/{symbol}"
+
+    def test_legge_gli_stacchi_quando_la_risposta_arriva(self, monkeypatch):
+        from setxray.sources import settrade
+
+        monkeypatch.setattr(settrade, "get_json", lambda url, params=None, **k: {
+            "rightsBenefits": [
+                {"xDate": "2025-04-24", "dividend": 1.20},
+                {"xDate": "2025-09-05", "dividend": 1.10},
+            ]})
+        serie = settrade.dividends("PTT")
+        assert len(serie) == 2
+        assert float(serie.iloc[0]) == pytest.approx(1.20)
+
+    def test_il_simbolo_entra_nell_indirizzo(self, monkeypatch):
+        from setxray.sources import settrade
+
+        visti = []
+
+        def finto(url, params=None, **k):
+            visti.append(url)
+            return {"rightsBenefits": [{"xDate": "2025-04-24", "dividend": 1.0}]}
+
+        monkeypatch.setattr(settrade, "get_json", finto)
+        settrade.dividends("ptt.bk")
+        assert "/PTT/" in visti[0], "normalizzato e senza suffisso"
+
+    def test_smette_di_provare_se_l_host_non_risponde(self, monkeypatch):
+        from setxray.sources import settrade
+
+        tentativi = []
+
+        def finto(url, params=None, **k):
+            tentativi.append(url)
+            raise FetchError("ConnectionError: host non raggiungibile")
+
+        monkeypatch.setattr(settrade, "get_json", finto)
+        with pytest.raises(FetchError):
+            settrade.dividends("PTT")
+        assert len(tentativi) == 1, "un host muto non va interrogato quattro volte"
+
+    def test_prova_l_indirizzo_successivo_su_un_404(self, monkeypatch):
+        from setxray.sources import settrade
+
+        tentativi = []
+
+        def finto(url, params=None, **k):
+            tentativi.append(url)
+            raise FetchError("HTTP 404 da www.settrade.com")
+
+        monkeypatch.setattr(settrade, "get_json", finto)
+        with pytest.raises(FetchError):
+            settrade.dividends("PTT")
+        assert len(tentativi) >= 3, "un indirizzo sbagliato non esclude gli altri"
+
+    def test_forma_inattesa_diventa_un_errore_leggibile(self, monkeypatch):
+        from setxray.sources import settrade
+
+        monkeypatch.setattr(settrade, "get_json",
+                            lambda url, params=None, **k: {"payload": {"ok": True}})
+        with pytest.raises(FetchError) as errore:
+            settrade.dividends("PTT")
+        assert "dividend" in str(errore.value).lower()
+
+    def test_e_nel_registro_con_la_fiducia_giusta(self):
+        from setxray.sources import describe_sources
+
+        righe = {r["key"]: r for r in describe_sources()}
+        assert "settrade" in righe, "la fonte deve comparire nell'elenco"
+        assert righe["settrade"]["trust"] == 5, "e' del gruppo SET: prima fila"
+        assert righe["settrade"]["active"] is True, "non serve una chiave"
+        assert righe["settrade"]["note"], "l'avvertenza va dichiarata"

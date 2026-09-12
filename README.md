@@ -150,6 +150,7 @@ knowing that two archives diverge is worth more than an average of the two.
 | Source | Key | How to activate it | Notes |
 |---|---|---|---|
 | **SET (official website)** | not needed | active | The authoritative source. Its public interface is undocumented: the tool tries several addresses, and you can force your own with `SETXRAY_SET_API`. **Check the result on first use.** |
+| **Settrade** | not needed | active | The SET group's own trading platform — where Thai retail actually reads its dividend tables. Same caveat, and `SETXRAY_SETTRADE_API` to force an address. **The endpoints have not been confirmed against the live site**; the *Data sources* tab reports what each attempt returned. |
 | **Local CSV file** | not needed | active | Always works, depends on no API. See below. |
 | **EOD Historical Data** | `EODHD_API_KEY` | free key at eodhd.com | Good coverage of Asian dividends. |
 | **Financial Modeling Prep** | `FMP_API_KEY` | free key at financialmodelingprep.com | Limited free plan. |
@@ -195,6 +196,7 @@ them never fails:
 | Route | Notes |
 |---|---|
 | **SET official website** | The referee. Its interface is undocumented, so the tool tries several addresses and checks the answer looks like a listing (50+ symbols) before believing it. |
+| **Settrade** | The same listing seen from the buying side. Same reader, same caveat: the endpoints are candidates, and every attempt is reported. |
 | **Yahoo screener** | Filtered on the Thai exchange, read page by page. If page three fails, the first two are still kept. |
 | **Local CSV** | `data/set-symbols.csv`, one symbol per line or with `symbol,name,sector` columns. Depends on no API. |
 
@@ -372,7 +374,7 @@ mobile/setxray.html    the phone preview: one static page, hand-drawn SVG charts
 tools/export_preview.py  runs the engine on the demo profiles -> mobile/dati.js
 tools/dump_strings.py    prints every string the app shows, in one language
 tools/check_languages.py compares the two languages and reports what lags behind
-tests/                 362 tests, all runnable without a network
+tests/                 370 tests, all runnable without a network
 ```
 
 The phone preview is a static page, so it cannot run Python: the engine's output

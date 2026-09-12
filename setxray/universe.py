@@ -11,8 +11,10 @@ avvisare. Quindi tre strade indipendenti, in ordine di fiducia, e una che
 funziona sempre:
 
     1. il sito ufficiale della SET, che e' l'arbitro;
-    2. lo screener di Yahoo filtrato sulla borsa thailandese;
-    3. un CSV locale - data/set-symbols.csv - che non dipende da nessuna API.
+    2. Settrade, la piattaforma di trading del gruppo SET: lo stesso listino
+       visto dal lato di chi compra;
+    3. lo screener di Yahoo filtrato sulla borsa thailandese;
+    4. un CSV locale - data/set-symbols.csv - che non dipende da nessuna API.
 
 Se cadono tutte e tre resta l'elenco dei titoli molto scambiati che sta in
 `datasource`: sedici nomi, dichiarati come tali. Un elenco corto e vero e'
@@ -58,6 +60,17 @@ URL_SET = (
     "https://www.set.or.th/api/set/stock/list",
     "https://www.set.or.th/api/set/stock/list?securityType=S",
     "https://www.set.or.th/api/set/index/sSET/composition",
+)
+
+# Settrade e' la piattaforma di trading del gruppo SET: la stessa lista vista
+# dal lato di chi compra. Nessuno di questi indirizzi e' stato confermato
+# contro il servizio vivo - dall'ambiente in cui sono stati scritti la rete
+# verso i siti di mercato e' bloccata - e l'esito di ogni tentativo finisce
+# nelle note dell'elenco, per intero.
+URL_SETTRADE = (
+    "https://www.settrade.com/api/set/stock/list",
+    "https://www.settrade.com/api/set/stock/list?securityType=S",
+    "https://api.settrade.com/api/set/stock/list",
 )
 
 
@@ -194,21 +207,39 @@ def _da_json_set(dati: object) -> list[Titolo]:
 TIMEOUT_SET = 8
 
 
-def dal_sito_set() -> tuple[list[Titolo], str]:
-    """Strada 1: il sito ufficiale. E' l'arbitro, quando risponde."""
+def _da_indirizzi(indirizzi: tuple[str, ...], etichetta: str) -> tuple[list[Titolo], str]:
+    """Prova gli indirizzi in ordine e ritorna il primo listino riconoscibile.
+
+    Vale sia per il sito della SET sia per Settrade: sono due siti dello stesso
+    gruppo e la forma delle risposte e' la stessa, quindi il lettore e' uno. Se
+    un giorno divergessero, questa funzione si sdoppia - ma copiarla adesso
+    vorrebbe dire correggere due volte ogni errore.
+    """
     errori = []
-    for url in URL_SET:
+    for url in indirizzi:
+        nome = url.rsplit("/", 1)[-1]
         try:
             titoli = _da_json_set(get_json(url, timeout=TIMEOUT_SET))
         except FetchError as errore:
-            errori.append(f"{url.rsplit('/', 1)[-1]}: {errore}")
+            errori.append(f"{nome}: {errore}")
             continue
         if len(titoli) >= 50:      # meno di cosi' non e' il listino
-            return titoli, L("SET (official website)", "SET (sito ufficiale)")
-        errori.append(L(f"{url.rsplit('/', 1)[-1]}: {len(titoli)} symbols recognised, too few",
-                        f"{url.rsplit('/', 1)[-1]}: {len(titoli)} simboli riconosciuti, troppo pochi"))
+            return titoli, etichetta
+        errori.append(L(f"{nome}: {len(titoli)} symbols recognised, too few",
+                        f"{nome}: {len(titoli)} simboli riconosciuti, troppo pochi"))
     raise FetchError("; ".join(errori[:3]) or L("no endpoint answered",
                                                 "nessun indirizzo ha risposto"))
+
+
+def dal_sito_set() -> tuple[list[Titolo], str]:
+    """Strada 1: il sito ufficiale della borsa. E' l'arbitro, quando risponde."""
+    return _da_indirizzi(URL_SET, L("SET (official website)", "SET (sito ufficiale)"))
+
+
+def da_settrade() -> tuple[list[Titolo], str]:
+    """Strada 2: Settrade, la piattaforma di trading del gruppo SET."""
+    return _da_indirizzi(URL_SETTRADE, L("Settrade (SET trading platform)",
+                                         "Settrade (piattaforma della SET)"))
 
 
 def da_yahoo(pagine: int = 8, per_pagina: int = 250) -> tuple[list[Titolo], str]:
@@ -386,7 +417,8 @@ def load_universe(*, ttl_ore: float = CACHE_TTL_ORE, only: Optional[list[str]] =
     if dalla_cache is not None:
         return dalla_cache
 
-    strade = [("csv", dal_csv), ("set", dal_sito_set), ("yahoo", da_yahoo)]
+    strade = [("csv", dal_csv), ("set", dal_sito_set), ("settrade", da_settrade),
+              ("yahoo", da_yahoo)]
     if offline:
         strade = [(nome, fn) for nome, fn in strade if nome == "csv"]
     if only is not None:
