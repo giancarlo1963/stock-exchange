@@ -289,6 +289,48 @@ def print_symbols(destinazione: str | None) -> int:
     return 0
 
 
+def print_probe(symbol: str | None, indirizzo: str) -> int:
+    """Prova gli indirizzi delle fonti e stampa cosa risponde ognuno.
+
+    Va eseguito su una macchina che quei siti li raggiunge: e' l'unico modo di
+    sapere se le strade SET e Settrade funzionano davvero, dato che nessuna
+    delle due e' documentata. Con un indirizzo come argomento prova quello, che
+    e' il caso di chi l'ha appena trovato nella scheda Rete del browser.
+    """
+    from setxray.sources.probe import Esito, STATI, probe, prova_indirizzo, riassunto
+
+    if indirizzo:
+        esiti = [prova_indirizzo(indirizzo)]
+    elif symbol:
+        esiti = probe(symbol)
+    else:
+        print(L("give a symbol: python -m setxray PTT --probe",
+                "indica un simbolo: python -m setxray PTT --probe"), file=sys.stderr)
+        return 2
+
+    print()
+    for esito in esiti:
+        colore = GREEN if esito.ok else (AMBER if esito.stato == "unrecognised" else OFF)
+        print(f"  {colore}{STATI[esito.stato]():24s}{OFF} {esito.url}")
+        print(f"  {'':24s} {esito.dettaglio}  ({esito.millisecondi} ms)")
+        if esito.forma:
+            print(L(f"  {'':24s} shape: {esito.forma}", f"  {'':24s} forma: {esito.forma}"))
+        if esito.campione:
+            print(L(f"  {'':24s} fields: {', '.join(esito.campione)}",
+                    f"  {'':24s} campi: {', '.join(esito.campione)}"))
+        print()
+    print(f"{BOLD}{riassunto(esiti)}{OFF}")
+    buono: Esito | None = next((e for e in esiti if e.ok), None)
+    if buono is not None and symbol:
+        variabile = "SETXRAY_SETTRADE_API" if buono.source == "settrade" else "SETXRAY_SET_API"
+        modello = buono.url.replace(symbol.upper().replace(".BK", ""), "{symbol}")
+        print()
+        print(L(f"  Fix it with:  export {variabile}='{modello}'",
+                f"  Fissalo con:  export {variabile}='{modello}'"))
+    print()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     lingua = _lingua_da_argv(argv)
     parser = argparse.ArgumentParser(
@@ -334,6 +376,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lang", choices=list(CODES), default=lingua,
                         help=L(f"interface language (default {lingua}, or SETXRAY_LANG)",
                                f"lingua dell'interfaccia (predefinita {lingua}, o SETXRAY_LANG)"))
+    parser.add_argument("--probe", nargs="?", const="", metavar=L("ENDPOINT", "INDIRIZZO"),
+                        help=L("try the SET and Settrade endpoints for the symbol and say what "
+                               "each one answers; with an address, try that one",
+                               "prova gli indirizzi della SET e di Settrade per il simbolo e dice "
+                               "cosa risponde ognuno; con un indirizzo, prova quello"))
     parser.add_argument("--version", action="version", version=f"setxray {__version__}")
     args = parser.parse_args(argv)
 
@@ -359,6 +406,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.symbols is not None:
         return print_symbols(args.symbols)
+
+    if args.probe is not None:
+        return print_probe(args.symbol, args.probe)
 
     if args.clear_cache:
         print(L(f"Cache cleared ({clear_cache()} files).",
@@ -404,7 +454,7 @@ def main(argv: list[str] | None = None) -> int:
                 percorso = os.path.join(args.charts, f"{analisi.symbol}-{nome}.png")
                 figura.write_image(percorso, width=1100,
                                    height=int(figura.layout.height or 380), scale=2)
-            print(L(f"Charts saved to {args.charts}", f"Grafici salvati in {args.grafici}"))
+            print(L(f"Charts saved to {args.charts}", f"Grafici salvati in {args.charts}"))
         except Exception as errore:
             print(L(f"{AMBER}Charts not saved:{OFF} {type(errore).__name__} - {errore}",
                     f"{AMBER}Grafici non salvati:{OFF} {type(errore).__name__} - {errore}"),

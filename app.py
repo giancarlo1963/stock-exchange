@@ -23,6 +23,8 @@ from setxray.lang import CODES, L, NAMES, action_label, normalize, set_language
 from setxray.universe import Universo, load_universe
 from setxray.scoring import BUY, HOLD, SELL
 from setxray.sources import describe_sources
+from setxray.sources.probe import probe, prova_indirizzo as try_endpoint, riassunto
+from setxray.sources.settrade import pagina as settrade_page
 
 # La lingua si fissa prima di ogni altra cosa: da qui in giu' ogni L() la
 # legge, compreso il titolo della pagina. Sta nell'indirizzo (?lang=it) perche'
@@ -954,6 +956,112 @@ with schede[6]:
   decimale. Le date si leggono con il giorno prima del mese, come scrive la SET.
   Il file viene trattato come la fonte piu' affidabile e usato al posto delle API.
   """))
+
+    # --- la sonda: la verifica la fa chi ha la rete ----------------------
+    # Ne' la SET ne' Settrade pubblicano un'API documentata: gli indirizzi che
+    # questo strumento prova sono quelli con cui i loro siti riempiono le
+    # proprie pagine, e da qui non erano verificabili - la macchina su cui il
+    # codice e' stato scritto quei siti non li raggiunge. Questa macchina si'.
+    # Un clic, e si sa quale indirizzo e' quello vero.
+    st.markdown(L("#### Test the SET and Settrade endpoints",
+                  "#### Prova gli indirizzi della SET e di Settrade"))
+    st.caption(L("Neither the SET nor Settrade publishes a documented API: the addresses this "
+                 "tool tries are the ones their own websites use to fill their pages, and they "
+                 "can move without notice. This machine can reach them, so it can tell you which "
+                 "one is the real one - for each address: whether it answers, whether it answers "
+                 "JSON, and whether the dividends were recognised.",
+                 "Ne' la SET ne' Settrade pubblicano un'API documentata: gli indirizzi che questo "
+                 "strumento prova sono quelli con cui i loro siti riempiono le proprie pagine, e "
+                 "possono cambiare senza preavviso. Questa macchina li raggiunge, quindi puo' "
+                 "dire qual e' quello vero - per ogni indirizzo: se risponde, se risponde JSON, "
+                 "e se i dividendi sono stati riconosciuti."))
+    if analisi.data.is_demo:
+        # In dimostrazione il simbolo e' inventato: interrogare la SET su
+        # DEMO-DIVIDENDO non direbbe niente a nessuno.
+        st.caption(L("The probe needs a real symbol - in demo mode the symbol is invented, and "
+                     "there would be nothing to ask the SET about. Analyse a real stock and come "
+                     "back here.",
+                     "La sonda ha bisogno di un simbolo vero - in modalita' dimostrativa il "
+                     "simbolo e' inventato, e alla SET non ci sarebbe niente da chiedere. "
+                     "Analizza un titolo vero e torna qui."))
+    else:
+        st.markdown(
+            L(f"The dividend table for **{m.symbol}**, to read with your own eyes: "
+              f"[Settrade]({settrade_page(m.symbol)}) · "
+              f"[SET](https://www.set.or.th/en/market/product/stock/quote/{m.symbol}"
+              f"/rights-benefits)",
+              f"La tabella degli stacchi di **{m.symbol}**, da leggere con i propri occhi: "
+              f"[Settrade]({settrade_page(m.symbol)}) · "
+              f"[SET](https://www.set.or.th/th/market/product/stock/quote/{m.symbol}"
+              f"/rights-benefits)"))
+        if st.button(L(f"Try every endpoint for {m.symbol}",
+                       f"Prova tutti gli indirizzi per {m.symbol}"),
+                     key="sonda-fonti", use_container_width=True):
+            with st.spinner(L("Trying one by one...", "Provo uno per uno...")):
+                st.session_state["esiti-sonda"] = probe(m.symbol)
+        esiti = st.session_state.get("esiti-sonda")
+        if esiti:
+            st.dataframe(pd.DataFrame([e.riga() for e in esiti]),
+                         use_container_width=True, hide_index=True)
+            # Il riassunto come righe di testo e non come blocco di codice: un
+            # blocco di codice non va a capo, e su un telefono la conclusione
+            # finirebbe fuori dallo schermo.
+            for riga in riassunto(esiti).splitlines():
+                st.markdown(f"- {riga}")
+            # Se un indirizzo risponde JSON ma il lettore non riconosce niente,
+            # l'indirizzo e' quello giusto e va adeguato il lettore: per
+            # scriverlo servono le chiavi del primo record, e sono queste.
+            for esito in esiti:
+                if esito.stato == "unrecognised" and esito.campione:
+                    st.caption(
+                        L(f"`{esito.url}` answers JSON with these fields - this is what a "
+                          f"reader for it would need: `{', '.join(esito.campione)}`",
+                          f"`{esito.url}` risponde JSON con questi campi - e' quello che "
+                          f"servirebbe per scriverne il lettore: `{', '.join(esito.campione)}`"))
+            buono = next((e for e in esiti if e.ok), None)
+            if buono is not None:
+                variabile = ("SETXRAY_SETTRADE_API" if buono.source == "settrade"
+                             else "SETXRAY_SET_API")
+                modello = buono.url.replace(m.symbol, "{symbol}")
+                st.success(
+                    L(f"Fix this endpoint with `{variabile}` (use `{{symbol}}` as the "
+                      f"placeholder) and the source keeps working without a code change:"
+                      f"\n\n`{variabile}={modello}`",
+                      f"Fissa questo indirizzo con `{variabile}` (usa `{{symbol}}` come "
+                      f"segnaposto) e la fonte continua a funzionare senza cambiare codice:"
+                      f"\n\n`{variabile}={modello}`"))
+    with st.expander(L("I know the right endpoint: try it",
+                       "Conosco l'indirizzo giusto: provalo")):
+        st.caption(L("Open the quote page with your browser's Network tab on, and look at which "
+                     "address it calls to fill itself. Paste it here with the symbol in it: the "
+                     "probe says whether this tool can read it.",
+                     "Apri la pagina delle quotazioni con la scheda Rete del browser attiva, e "
+                     "guarda quale indirizzo chiama per riempirsi. Incollalo qui con dentro il "
+                     "simbolo: la sonda dice se questo strumento lo sa leggere."))
+        mio = st.text_input(L("Endpoint", "Indirizzo"), key="sonda-mio",
+                            placeholder="https://www.settrade.com/api/.../SCB/...")
+        # Il pulsante e non solo l'invio: sulla tastiera di un telefono l'invio
+        # non sempre conferma il campo, e un campo che non fa niente sembra
+        # rotto. L'esito sta nello stato della sessione, cosi' resta sullo
+        # schermo quando la pagina si ridisegna per un altro motivo.
+        vai = st.button(L("Try this endpoint", "Prova questo indirizzo"), key="sonda-mio-vai")
+        if mio.strip() and (vai or st.session_state.get("_sonda-ultimo") != mio.strip()):
+            st.session_state["_sonda-ultimo"] = mio.strip()
+            with st.spinner(L("Trying it...", "Lo provo...")):
+                st.session_state["esito-mio"] = try_endpoint(mio.strip())
+        esito_mio = st.session_state.get("esito-mio")
+        if esito_mio is not None:
+            st.dataframe(pd.DataFrame([esito_mio.riga()]),
+                         use_container_width=True, hide_index=True)
+            if esito_mio.campione:
+                st.caption(L(f"Fields in the first record: `{', '.join(esito_mio.campione)}`",
+                             f"Campi del primo record: `{', '.join(esito_mio.campione)}`"))
+            if esito_mio.ok:
+                st.success(L("This tool can read it. Fix it with `SETXRAY_SETTRADE_API` (or "
+                             "`SETXRAY_SET_API`), putting `{symbol}` where the symbol is.",
+                             "Questo strumento lo sa leggere. Fissalo con "
+                             "`SETXRAY_SETTRADE_API` (o `SETXRAY_SET_API`), mettendo "
+                             "`{symbol}` dove c'e' il simbolo."))
 
     st.markdown(L("#### What was found in the rest of the data",
                   "#### Cosa e' stato trovato negli altri dati"))

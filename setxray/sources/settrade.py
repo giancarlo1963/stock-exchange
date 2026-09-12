@@ -19,7 +19,23 @@ servizio vivo. Quindi, come per il sito della SET:
   {symbol} come segnaposto;
 - l'esito di ogni tentativo finisce nella scheda *Fonti dei dati*, con
   l'errore per intero: al primo titolo analizzato si sa se questa strada
-  funziona, e se non funziona si sa perche'.
+  funziona, e se non funziona si sa perche';
+- e nella stessa scheda c'e' il pulsante che prova gli indirizzi uno per uno
+  (`setxray.sources.probe`) e dice per ognuno se risponde, se risponde JSON e
+  se i dividendi sono stati riconosciuti. La verifica la fa chi la rete verso
+  Settrade ce l'ha, cioe' chi fa girare l'app, non chi ha scritto il codice.
+
+La pagina da cui partire e' quella delle quotazioni,
+https://www.settrade.com/th/get-quote : con la scheda Rete del browser aperta
+si vede quale indirizzo interroga per riempirsi, e quello e' l'indirizzo buono.
+Si incolla nella sonda, e se la sonda dice che funziona si fissa con
+SETXRAY_SETTRADE_API.
+
+Esiste anche una strada ufficiale, la Settrade Open API
+(developer.settrade.com): e' documentata e mantenuta, ma e' pensata per il
+trading e richiede un conto presso un broker che la abiliti, con credenziali
+proprie. Per la storia degli stacchi di un titolo e' molto piu' apparato di
+quanto serva; resta la strada giusta per chi quel conto ce l'ha.
 
 Una nota che non riguarda il codice: le pagine di Settrade sono pubbliche, ma
 sono di un operatore privato. Interrogarne gli indirizzi interni per uno
@@ -47,7 +63,23 @@ INDIRIZZI = (
     "https://www.settrade.com/api/set/stock/{symbol}/corporate-action",
     "https://www.settrade.com/api/set/factsheet/{symbol}/rights-benefit",
     "https://api.settrade.com/api/set/stock/{symbol}/rights-benefit",
+    # Le due qui sotto vengono dalla forma della pagina pubblica, che ha la
+    # lingua nel percorso (/th/get-quote): un sito fatto cosi' a volte tiene
+    # anche le proprie chiamate sotto la lingua. Sono ipotesi come le altre - la
+    # sonda dira' quale delle sei e' quella vera.
+    "https://www.settrade.com/th/api/set/stock/{symbol}/rights-benefit",
+    "https://www.settrade.com/api/set/stock/{symbol}/rights-benefit-history",
 )
+
+
+def pagina(symbol: str) -> str:
+    """La pagina delle quotazioni, per guardare la tabella con i propri occhi.
+
+    Quando la lettura automatica non funziona il dato non e' perduto: e' scritto
+    su una pagina, e un collegamento che la apre sul titolo giusto vale piu' di
+    una spiegazione.
+    """
+    return f"https://www.settrade.com/th/get-quote?symbol={symbol}"
 
 
 def endpoints() -> tuple[str, ...]:

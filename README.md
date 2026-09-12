@@ -165,6 +165,53 @@ export SETXRAY_SOURCES=csv,yahoo    # restrict the sources (faster)
 python -m setxray --sources          # check what is active
 ```
 
+### Checking the endpoints yourself (the probe)
+
+Neither the SET nor Settrade publishes a documented API for outside use. The
+addresses this tool tries are the ones their own sites use to fill their pages,
+and they can move without notice — and whoever writes the code may have no
+network to those sites at all, in which case they can confirm nothing. Whoever
+*runs* the app does have that network. So the verification is theirs:
+
+```bash
+python -m setxray SCB --probe        # try every SET and Settrade endpoint
+python -m setxray --probe 'https://www.settrade.com/api/.../SCB/...'
+```
+
+The same thing sits in the *Data sources* tab as a button. For each address it
+reports one of five outcomes, and they mean different things:
+
+| outcome | what it means |
+|---|---|
+| **works** | dividends read; the address is good |
+| **JSON not recognised** | the address is right, the reader is not — the probe prints the JSON's shape and the fields of the first record, which is all it takes to write one |
+| **answers, but not JSON** | that address is a page, not an API: wrong address |
+| **HTTP error** | the address does not exist (404) or refuses (403) |
+| **unreachable** | not an address problem — it is the network or an egress policy |
+
+Found the right one? Fix it with an environment variable and the source works
+without a code change:
+
+```bash
+export SETXRAY_SETTRADE_API='https://www.settrade.com/api/.../{symbol}/...'
+export SETXRAY_SET_API='https://www.set.or.th/api/.../{symbol}/...'
+```
+
+To find it: open the quote page ([Settrade](https://www.settrade.com/th/get-quote),
+or the stock's page on set.or.th) with your browser's Network tab on, and look at
+which address the page calls to fill itself. Paste it into the probe, and it says
+whether this tool can read it.
+
+There is also an official route, the [Settrade Open
+API](https://developer.settrade.com): documented and maintained, but built for
+trading — it needs an account with a broker that enables it, and credentials of
+your own. For one stock's dividend history it is far more apparatus than the job
+needs; it stays the right route for anyone who has that account.
+
+And when nothing automatic works, the dividend data is not lost: it is written
+on a page. The *Data sources* tab links straight to that page for the stock on
+screen, and the CSV route below turns what you read there into data.
+
 ### The route that always works: the CSV
 
 No API is guaranteed to last. This one is. Copy the table of payments from the
@@ -400,12 +447,13 @@ setxray/
   engine.py            analyze(): the thread that ties it together
   universe.py          every symbol on the exchange: three routes plus a fallback
   lang.py              the language: one choice, two words for every sentence
+  sources/probe.py     tries the SET and Settrade endpoints and says what answers
   cli.py · demo.py · fmt.py
 mobile/setxray.html    the phone preview: one static page, hand-drawn SVG charts
 tools/export_preview.py  runs the engine on the demo profiles -> mobile/dati.js
 tools/dump_strings.py    prints every string the app shows, in one language
 tools/check_languages.py compares the two languages and reports what lags behind
-tests/                 370 tests, all runnable without a network
+tests/                 401 tests, all runnable without a network
 ```
 
 The phone preview is a static page, so it cannot run Python: the engine's output
