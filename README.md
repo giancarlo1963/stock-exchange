@@ -14,11 +14,16 @@ years, and answers a single question:
 The horizon is **one to two years at the very least**. This is not a trading
 tool.
 
-**In English or in Italian**, with a switch in the sidebar — and the language
-changes every word the tool writes: the analyst's prose, the charts, the report,
-the terminal. It also changes every figure, because the two languages do not
-write numbers the same way (`1,234.50` against `1.234,50`, `98.3bn` against
-`98,3 mld`).
+**In English or in Italian.** The switch is at the top of the sidebar, and
+there is a plain link at the top right of the page as well — on a phone
+Streamlit keeps the sidebar closed, so the link is the one you actually reach.
+Either way the address carries the choice (`?lang=it`), so a link you share
+opens in the language you were reading.
+
+The language changes every word the tool writes — the analyst's prose, the
+charts, the report, the terminal — and every figure with it, because the two
+languages do not write numbers the same way (`1,234.50` against `1.234,50`,
+`98.3bn` against `98,3 mld`, `11 Sep 2026` against `11/09/2026`).
 
 ![Main screen](docs/screenshot-dividends.png)
 

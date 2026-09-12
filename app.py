@@ -11,6 +11,7 @@ the answer first, the evidence after.
 from __future__ import annotations
 
 import io
+from urllib.parse import quote
 
 import pandas as pd
 import streamlit as st
@@ -19,7 +20,7 @@ from setxray import __version__, charts, fmt
 from setxray.datasource import clear_cache, popular_set_symbols
 from setxray.demo import PROFILE_KEYS, profile_names, profiles
 from setxray.engine import Analysis, NoDataError, analyze
-from setxray.lang import CODES, L, NAMES, action_label, set_language
+from setxray.lang import CODES, L, NAMES, action_label, normalize, set_language
 from setxray.scoring import BUY, HOLD, SELL
 from setxray.sources import describe_sources
 
@@ -27,9 +28,14 @@ from setxray.sources import describe_sources
 # legge, compreso il titolo della pagina. Sta nell'indirizzo (?lang=it) perche'
 # un collegamento condiviso deve aprirsi nella lingua di chi lo ha mandato, e
 # nello stato della sessione perche' sopravviva a un clic sui pulsanti.
-_LINGUA = set_language(st.session_state.get("lingua")
-                       or st.query_params.get("lang")
-                       or "en")
+# L'indirizzo viene prima della sessione: un collegamento con ?lang=it deve
+# aprirsi in italiano anche se l'interruttore era su un'altra lingua. Quando i
+# due non concordano vince l'indirizzo, e l'interruttore viene allineato prima
+# di disegnarlo - altrimenti mostrerebbe una lingua e la pagina un'altra.
+_DA_URL = normalize(st.query_params["lang"]) if st.query_params.get("lang") else None
+if _DA_URL and st.session_state.get("lingua") != _DA_URL:
+    st.session_state["lingua"] = _DA_URL
+_LINGUA = set_language(_DA_URL or st.session_state.get("lingua") or "en")
 
 st.set_page_config(page_title=L("SET X-Ray - Thai stock dividends and analysis",
                                 "SET X-Ray - dividendi e analisi azioni Thailandia"),
@@ -63,6 +69,10 @@ st.markdown("""
                           letter-spacing: 0.05em; opacity: 0.7; margin-bottom: 2px; }
     .disagreement { border-left: 4px solid #ec835a; background: rgba(236,131,90,0.10);
                     padding: 10px 14px; border-radius: 6px; margin-top: 8px; }
+    .lingua-riga { text-align: right; font-size: 0.8rem; opacity: 0.78;
+                   margin: -6px 0 2px 0; letter-spacing: 0.02em; }
+    .lingua-riga span { font-weight: 600; }
+    .lingua-riga a { text-decoration: underline; text-underline-offset: 3px; }
   </style>
   """, unsafe_allow_html=True)
 
@@ -179,6 +189,26 @@ with st.sidebar:
 if avvia:
     st.session_state["simbolo"] = simbolo
     st.session_state["esegui"] = True
+
+# --------------------------------------------------------------------------
+# la lingua, raggiungibile anche dal telefono
+# --------------------------------------------------------------------------
+# L'interruttore vero sta nella barra laterale, ma sul telefono Streamlit la
+# tiene chiusa: chi apre la pagina da li' non lo vede, e non ha modo di sapere
+# che c'e'. Questa riga sta sempre in vista e porta all'altra lingua
+# ricaricando la pagina. Porta dentro anche il simbolo, altrimenti il
+# collegamento perderebbe l'analisi che si stava guardando.
+def riga_lingua() -> str:
+    altra = "it" if _LINGUA == "en" else "en"
+    pezzi = [f"lang={altra}"]
+    corrente = st.session_state.get("simbolo") or ""
+    if corrente:
+        pezzi.insert(0, f"symbol={quote(corrente)}")
+    return (f"<div class='lingua-riga'><span>{NAMES[_LINGUA]}</span> · "
+            f"<a href='?{'&'.join(pezzi)}' target='_self'>{NAMES[altra]}</a></div>")
+
+
+st.markdown(riga_lingua(), unsafe_allow_html=True)
 
 if not st.session_state.get("esegui"):
     st.title(L("Dividends and analysis of a Stock Exchange of Thailand share",
