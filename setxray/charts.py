@@ -401,71 +401,156 @@ def health_chart(m: Metrics, dark: bool = False) -> go.Figure:
 # --------------------------------------------------------------------------
 # 8b. RSI: il prezzo e' corso troppo in fretta?
 # --------------------------------------------------------------------------
-def rsi_chart(m: Metrics, prices: Optional[pd.DataFrame], dark: bool = False,
-              anni: float = 2.0) -> go.Figure:
-    """L'RSI con le due zone, ipercomprato e ipervenduto.
+# I periodi fra cui scegliere, in sessioni di borsa. Quattordici e' la
+# convenzione di Wilder e l'unico per cui le soglie 70/30 sono tarate; gli
+# altri servono a chi vuole un orizzonte piu' vicino a quello del proprio
+# investimento, e vanno letti in un altro modo (vedi `rsi_chart`).
+PERIODI_RSI = (14, 63, 126, 252, 504, 756)
 
-    Due anni e non dieci: l'RSI e' un indicatore di settimane, e dieci anni di
-    valori giornalieri diventano una matassa in cui non si legge niente.
+
+# Le finestre disegnabili, in anni. Non e' la stessa scelta del periodo: il
+# periodo dice su quante sessioni si calcola l'indicatore, la finestra dice
+# quanta della sua storia si guarda.
+FINESTRE_RSI = (0.5, 1.0, 2.0, 3.0, 5.0)
+
+
+def nome_finestra(anni: float) -> str:
+    """La finestra in parole."""
+    if anni < 1:
+        mesi = int(round(anni * 12))
+        return L(f"last {mesi} months", f"ultimi {mesi} mesi")
+    interi = int(round(anni))
+    if interi == 1:
+        return L("last year", "ultimo anno")
+    return L(f"last {interi} years", f"ultimi {interi} anni")
+
+
+def nome_periodo(periodi: int) -> str:
+    """Il periodo in parole: chi investe pensa in mesi, non in sessioni."""
+    return {
+        14: L("14 sessions (standard)", "14 sessioni (standard)"),
+        21: L("1 month", "1 mese"),
+        63: L("3 months", "3 mesi"),
+        126: L("6 months", "6 mesi"),
+        252: L("1 year", "1 anno"),
+        504: L("2 years", "2 anni"),
+        756: L("3 years", "3 anni"),
+    }.get(periodi, L(f"{periodi} sessions", f"{periodi} sessioni"))
+
+
+def rsi_chart(m: Metrics, prices: Optional[pd.DataFrame], dark: bool = False,
+              anni: float = 2.0, periodi: int = RSI_PERIODS) -> go.Figure:
+    """L'RSI, con la banda giusta per il periodo scelto.
+
+    A 14 sessioni le soglie fisse 70 e 30 funzionano: il valore le tocca
+    qualche volta l'anno. Allungando il periodo non funzionano piu' - misurato
+    sui dati di prova, a 3 mesi l'RSI non arriva mai a 70 ne' a 30, e a 3 anni
+    resta fra 42 e 55 - perche' la media smorzata su piu' sessioni schiaccia
+    tutto verso il centro. Disegnare comunque le due righe rosse a 70/30
+    sarebbe decorazione: non le tocchera' mai nessuno.
+
+    Quindi per i periodi lunghi la banda diventa la *meta' centrale della
+    propria storia*, lo stesso metodo che questo strumento usa per il
+    rendimento da dividendo e per il P/E: non "sopra 70 e' caro" ma "oggi e'
+    piu' alto del solito per questo titolo". E' l'unica lettura che resta vera
+    quando la scala si stringe.
     """
     t = tokens(dark)
     if prices is None or prices.empty:
         return _empty(L("Price history not available", "Storico prezzi non disponibile"), t)
-    serie = rsi(prices["Close"])
+    serie = rsi(prices["Close"], periods=periodi)
     if serie is None or serie.empty:
-        return _empty(L("Price history too short to compute the RSI",
-                        "Storico prezzi troppo corto per calcolare l'RSI"), t)
+        return _empty(L(f"Price history too short for an RSI over {nome_periodo(periodi)}",
+                        f"Storico prezzi troppo corto per un RSI su {nome_periodo(periodi)}"), t)
     finestra = serie[serie.index >= serie.index[-1] - pd.Timedelta(days=int(365.25 * anni))]
     if len(finestra) < 30:
         finestra = serie
 
+    standard = periodi == RSI_PERIODS
+    if standard:
+        alto, basso = RSI_IPERCOMPRATO, RSI_IPERVENDUTO
+        etichetta_alto = L("overbought 70", "ipercomprato 70")
+        etichetta_basso = L("oversold 30", "ipervenduto 30")
+    else:
+        # I quartili di tutta la storia disponibile, non della finestra
+        # mostrata: una banda che si muove quando si cambia zoom non e' un
+        # riferimento, e' un riflesso di quello che si sta guardando.
+        alto, basso = float(serie.quantile(0.75)), float(serie.quantile(0.25))
+        etichetta_alto = L(f"top quarter {fmt.num(alto, 0)}",
+                           f"quarto alto {fmt.num(alto, 0)}")
+        etichetta_basso = L(f"bottom quarter {fmt.num(basso, 0)}",
+                            f"quarto basso {fmt.num(basso, 0)}")
+
     fig = go.Figure()
     # Le zone come fasce, non come linee tratteggiate: la fascia dice "qui
     # dentro" mentre una linea dice solo "sopra questo".
-    fig.add_hrect(y0=RSI_IPERCOMPRATO, y1=100, fillcolor=t["band_bad"], line_width=0, layer="below")
-    fig.add_hrect(y0=0, y1=RSI_IPERVENDUTO, fillcolor=t["band_good"], line_width=0, layer="below")
+    massimo = 100 if standard else min(100.0, float(serie.max()) + 3)
+    minimo = 0 if standard else max(0.0, float(serie.min()) - 3)
+    fig.add_hrect(y0=alto, y1=massimo, fillcolor=t["band_bad"], line_width=0, layer="below")
+    fig.add_hrect(y0=minimo, y1=basso, fillcolor=t["band_good"], line_width=0, layer="below")
     fig.add_hline(y=50, line=dict(color=t["axis"], width=1))
-    fig.add_trace(_line(finestra.index, finestra.values, L("RSI", "RSI"), t["s1"], t, width=1.8))
+    fig.add_trace(_line(finestra.index, finestra.values, "RSI", t["s1"], t, width=1.8))
 
-    for valore, colore, testo in (
-            (RSI_IPERCOMPRATO, t["critical"], L("overbought 70", "ipercomprato 70")),
-            (RSI_IPERVENDUTO, t["good"], L("oversold 30", "ipervenduto 30"))):
+    for valore, colore, testo in ((alto, t["critical"], etichetta_alto),
+                                  (basso, t["good"], etichetta_basso)):
         fig.add_hline(y=valore, line=dict(color=colore, width=1.2),
                       annotation_text=testo, annotation_position="top left",
                       annotation_font=dict(size=11, color=colore))
 
     attuale = float(finestra.iloc[-1])
-    zona = (L("overbought", "ipercomprato") if attuale >= RSI_IPERCOMPRATO
-            else L("oversold", "ipervenduto") if attuale <= RSI_IPERVENDUTO
-            else L("neutral", "zona neutra"))
-    colore = (t["critical"] if attuale >= RSI_IPERCOMPRATO
-              else t["good"] if attuale <= RSI_IPERVENDUTO else t["ink2"])
+    if standard:
+        zona = (L("overbought", "ipercomprato") if attuale >= alto
+                else L("oversold", "ipervenduto") if attuale <= basso
+                else L("neutral", "zona neutra"))
+    else:
+        zona = (L("high for this stock", "alto per questo titolo") if attuale >= alto
+                else L("low for this stock", "basso per questo titolo") if attuale <= basso
+                else L("in its usual range", "nella sua fascia abituale"))
+    colore = (t["critical"] if attuale >= alto else t["good"] if attuale <= basso else t["ink2"])
     fig.add_trace(go.Scatter(
         x=[finestra.index[-1]], y=[attuale], mode="markers+text", showlegend=False,
         marker=dict(color=colore, size=9, line=dict(color=t["surface"], width=2)),
-        text=[f"  {fmt.num(attuale, 0)}"], textposition="middle right",
+        text=[f"{fmt.num(attuale, 0)}  "], textposition="middle left",
         textfont=dict(size=12, color=colore),
         hovertemplate=L("today: %{y:.0f}<extra></extra>", "oggi: %{y:.0f}<extra></extra>"),
     ))
 
+    if standard:
+        spiega = L("<br>Above 70 the recent rise has been one-sided; below 30, the fall."
+                   "<br>It measures weeks, not years: the day to buy, not what to buy.",
+                   "<br>Sopra 70 la salita recente e' stata tutta in una direzione, sotto 30 "
+                   "la discesa.<br>Misura settimane, non anni: il giorno in cui comprare, "
+                   "non cosa comprare.")
+    else:
+        spiega = L("<br>Over this many sessions the fixed 70/30 thresholds are never reached."
+                   "<br>The band is the middle half of this stock's own RSI history: read it as "
+                   "<br>\"higher than usual for this stock\", not as \"expensive\".",
+                   "<br>Su tante sessioni le soglie fisse 70/30 non vengono mai raggiunte."
+                   "<br>La fascia e' la meta' centrale della storia dell'RSI del titolo: si "
+                   "legge<br>\"piu' alto del solito per questo titolo\", non \"caro\".")
+
+    righe = spiega.count("<br>") + 1
     fig = _layout(
         fig, t,
-        title=L(f"RSI at {RSI_PERIODS} days: has the price run too fast?",
-                f"RSI a {RSI_PERIODS} giorni: il prezzo e' corso troppo?"),
-        # Il sottotitolo va a capo a mano: Plotly non manda a capo il titolo, e
-        # su uno schermo strétto la riga finirebbe fuori dal riquadro.
-        subtitle=L(f"Today {fmt.num(attuale, 0)}, {zona}. Above 70 the recent rise has been "
-                   "one-sided, below 30 the fall has."
-                   "<br>It measures weeks, not years: it helps pick the day to buy, not what "
-                   "to buy.",
-                   f"Oggi {fmt.num(attuale, 0)}, {zona}. Sopra 70 la salita recente e' stata "
-                   "tutta in una direzione, sotto 30 lo e' stata la discesa."
-                   "<br>Misura settimane, non anni: serve a scegliere il giorno in cui "
-                   "comprare, non cosa comprare."),
-        height=320)
-    fig.update_yaxes(range=[0, 100], tickvals=[0, 30, 50, 70, 100])
-    # due righe di sottotitolo hanno bisogno di piu' spazio in alto
-    fig.update_layout(showlegend=False, margin=dict(l=56, r=44, t=104, b=48))
+        # La domanda sta nel sottotitolo e non nel titolo: sullo schermo di un
+        # telefono un titolo di due frasi viene tagliato a meta', e la meta'
+        # tagliata e' sempre quella che spiega.
+        title=L(f"RSI over {nome_periodo(periodi)}",
+                f"RSI su {nome_periodo(periodi)}"),
+        subtitle=L(f"Has the price run too fast? Today {fmt.num(attuale, 0)}, {zona}.",
+                   f"Il prezzo e' corso troppo? Oggi {fmt.num(attuale, 0)}, {zona}.")
+                 + spiega,
+        # Lo spazio in alto segue il numero di righe del sottotitolo: la
+        # spiegazione dei periodi lunghi ne ha una in piu', e con un margine
+        # fisso finiva sopra la prima fascia.
+        height=280 + 20 * righe)
+    if standard:
+        fig.update_yaxes(range=[0, 100], tickvals=[0, 30, 50, 70, 100])
+    else:
+        fig.update_yaxes(range=[minimo, massimo])
+    # Le righe sono corte per stare in 430 pixel, che e' la larghezza di un
+    # telefono: il testo di Plotly non va a capo da solo.
+    fig.update_layout(showlegend=False, margin=dict(l=56, r=24, t=66 + 20 * righe, b=48))
     return fig
 
 

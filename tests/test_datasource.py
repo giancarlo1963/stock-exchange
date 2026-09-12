@@ -113,6 +113,9 @@ class TickerFinto:
 def yfinance_finto(monkeypatch, tmp_path):
     """Sostituisce yfinance e sposta la cache in una cartella temporanea."""
     monkeypatch.setattr(datasource, "_CACHE_DIR", str(tmp_path / "cache"))
+    # La pausa fra i tentativi serve contro il limite di richieste di Yahoo.
+    # Qui Yahoo non c'e': aspettare allungherebbe solo la suite.
+    monkeypatch.setattr(datasource, "PAUSA_FRA_TENTATIVI", 0)
     modulo = types.ModuleType("yfinance")
     modulo.Ticker = TickerFinto
     monkeypatch.setitem(sys.modules, "yfinance", modulo)
@@ -177,6 +180,72 @@ class TestYahooCheNonCollabora:
             index=pd.MultiIndex.from_tuples([("TotalRevenue", "Gross Profit")]),
         )
         assert row(frame, "TotalRevenue").iloc[0] == 1000.0
+
+
+class TestStoricoPrezzi:
+    """Lo storico e' il dato da cui nascono meta' dei grafici: vale insistere."""
+
+    def test_colonne_a_due_livelli(self, monkeypatch, yfinance_finto):
+        """Con le colonne a due livelli "Close" non si trovava, e i prezzi
+        sembravano assenti mentre erano arrivati tutti."""
+        def a_due_livelli(self, **_):
+            frame = _prezzi()
+            frame.columns = pd.MultiIndex.from_product([frame.columns, ["PTT.BK"]])
+            return frame
+
+        monkeypatch.setattr(TickerFinto, "history", a_due_livelli)
+        prezzi = fetch_stock("ptt", cache_ttl_min=0).prices
+        assert prezzi is not None and "Close" in prezzi.columns
+        assert len(prezzi) == 600
+
+    def test_ritenta_su_un_periodo_piu_corto(self, monkeypatch, yfinance_finto):
+        """Yahoo che limita le richieste risponde con una tabella vuota, non con
+        un errore: il secondo tentativo su un periodo corto spesso passa."""
+        chiamate = []
+
+        def a_strappi(self, **kwargs):
+            if self.ticker != "PTT.BK":  # l'indice SET passa dalla stessa classe
+                return _prezzi()
+            chiamate.append(kwargs.get("period"))
+            if len(chiamate) == 1:
+                return pd.DataFrame()
+            return _prezzi(giorni=300)
+
+        monkeypatch.setattr(TickerFinto, "history", a_strappi)
+        dati = fetch_stock("ptt", cache_ttl_min=0, history_period="10y")
+        assert dati.prices is not None and len(dati.prices) == 300
+        assert chiamate == ["10y", "5y"], "il ripiego deve chiedere meno storico"
+        assert any("5y" in avviso for avviso in dati.warnings), \
+            "il tentativo andato a vuoto resta scritto"
+
+    def test_rinuncia_dopo_tutti_i_tentativi(self, monkeypatch, yfinance_finto):
+        chiamate = []
+
+        def sempre_vuoto(self, **kwargs):
+            if self.ticker == "PTT.BK":
+                chiamate.append(kwargs.get("period"))
+            return pd.DataFrame()
+
+        monkeypatch.setattr(TickerFinto, "history", sempre_vuoto)
+        dati = fetch_stock("ptt", cache_ttl_min=0, history_period="11y")
+        assert dati.prices is None
+        assert chiamate == ["11y", "5y", "1y"]
+
+    def test_una_sola_seduta_non_e_uno_storico(self, monkeypatch, yfinance_finto):
+        """Una riga sola non fa una serie: meglio ritentare che tenerla."""
+        monkeypatch.setattr(TickerFinto, "history",
+                            lambda self, **_: _prezzi(giorni=1))
+        dati = fetch_stock("ptt", cache_ttl_min=0)
+        assert dati.prices is None
+
+    def test_senza_prezzi_non_si_scrive_la_cache(self, monkeypatch, yfinance_finto):
+        """Un fallimento di Yahoo congelato per un'ora sarebbe un titolo rotto
+        fino allo scadere del tempo, senza modo di accorgersene."""
+        monkeypatch.setattr(TickerFinto, "history", lambda self, **_: pd.DataFrame())
+        fetch_stock("ptt", cache_ttl_min=60)
+        monkeypatch.setattr(TickerFinto, "history", lambda self, **_: _prezzi())
+        secondo = fetch_stock("ptt", cache_ttl_min=60)
+        assert not secondo.from_cache and secondo.prices is not None
 
 
 class TestCache:

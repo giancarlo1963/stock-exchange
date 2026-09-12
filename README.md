@@ -44,7 +44,9 @@ Where the safety score comes from, factor by factor.
 
 ![Safety factors](docs/safety-factors.png)
 
-And, for timing an entry rather than choosing one, the RSI with its two zones.
+And, for timing an entry rather than choosing one, the RSI — over 14 sessions
+with the classic zones, or over any period up to three years, where the band
+becomes the stock's own usual range.
 
 ![RSI with overbought and oversold zones](docs/rsi.png)
 
@@ -257,12 +259,41 @@ different things.
 
 ### 3b. Has the price run too fast? (RSI)
 
-The 14-day RSI, with the two classic zones: above 70 the recent rise has been
-one-sided (overbought), below 30 the fall has (oversold). Wilder's own
+The RSI over 14 sessions, with the two classic zones: above 70 the recent rise
+has been one-sided (overbought), below 30 the fall has (oversold). Wilder's own
 definition — the exponential average seeded with the simple average of the
-first 14 moves — so the number matches what your platform shows. The chart
-covers two years, not ten: this is an indicator of weeks, and ten years of
-daily values is a hairball.
+first 14 moves — so the number matches what your platform shows.
+
+**Why 14, and what happens if you ask for more.** Fourteen is Wilder's 1978
+convention, and the reason it is still the default is not that it is optimal:
+it is that the 70/30 thresholds are calibrated for it, and that an indicator
+works partly because everyone is watching the same number. But the question
+"has it run too fast *on my horizon*" is a fair one, so the period is a menu:
+14 sessions, 3 months, 6 months, 1 year, 2 years, 3 years.
+
+What it costs is the thresholds. Wilder's average over more sessions squeezes
+everything towards 50 — measured on the test data:
+
+| period | median | min | max | over 70 | under 30 |
+|---|---|---|---|---|---|
+| 14 sessions | 48.7 | 11.7 | 86.2 | 4.3% | 5.2% |
+| 3 months | 48.5 | 30.7 | 67.6 | 0.0% | 0.0% |
+| 1 year | 48.5 | 39.7 | 57.9 | 0.0% | 0.0% |
+| 3 years | 47.6 | 41.9 | 54.9 | 0.0% | 0.0% |
+
+Beyond 14 sessions the two red lines at 70 and 30 are decoration: nothing ever
+touches them. So on the longer periods the chart drops them and draws the
+**middle half of this stock's own RSI history** instead — the same treatment
+this tool gives the dividend yield and the P/E. The reading changes with it:
+not "above 70, expensive" but "higher than usual for this stock". The band is
+computed on the whole history, not on the visible window, so zooming does not
+move it.
+
+![RSI over one year, banded on the stock's own history](docs/rsi-lungo.png)
+
+A second menu sets how much history to draw (6 months to 5 years). It is only
+the width of the chart: this is an indicator of weeks, and ten years of daily
+values is a hairball.
 
 It is deliberately **outside the score**. The score answers "is this worth
 owning for one to two years"; the RSI answers "has the last month been
@@ -443,7 +474,15 @@ number ends up inside an Italian sentence.
   can only be reconstructed for the last four years, while dividends and prices
   cover a full ten.
 - **Yahoo rate-limits requests.** There is a one-hour local cache
-  (`~/.cache/setxray`); if you get errors, wait a few minutes.
+  (`~/.cache/setxray`); if you get errors, wait a few minutes. When it limits
+  you it does not answer with an error, it answers with an empty table — so a
+  stock can arrive with its whole company summary and not one historical
+  price. Everything built on the price series then comes up empty: the price
+  chart, the RSI, the comparison with the index, the history of the multiples.
+  The fetch retries over a shorter period before giving up, a price-less result
+  is never cached, and the app says at the top of the page that the history is
+  missing, with a button to download it again. The rest of the analysis —
+  dividends, financial statements, valuation — is unaffected.
 - **The exchange rate is not forecast.** The stock is in baht: for anyone
   investing in euros the final return also depends on EUR/THB.
 - **The dividend forecast is an extrapolation from the financial statements**, not

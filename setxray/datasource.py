@@ -313,6 +313,12 @@ def _normalize_prices(df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
     if df is None or df.empty:
         return None
     out = df.copy()
+    if isinstance(out.columns, pd.MultiIndex):
+        # yfinance a volte restituisce colonne a due livelli (campo, simbolo).
+        # Senza appiattirle "Close" non si trova, la funzione ritorna None e lo
+        # storico sembra assente quando in realta' era arrivato.
+        out.columns = [livello[0] if isinstance(livello, tuple) else livello
+                       for livello in out.columns]
     out.columns = [str(c) for c in out.columns]
     rename = {}
     for col in out.columns:
@@ -332,6 +338,51 @@ def _normalize_prices(df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
     except (TypeError, AttributeError):
         out.index = pd.to_datetime(out.index)
     return out.dropna(subset=["Close"])
+
+
+# Periodi di ripiego per lo storico, dal richiesto al piu' corto. Yahoo, quando
+# decide che le richieste sono troppe, non risponde con un errore: risponde con
+# una tabella vuota. E' la ragione piu' frequente per cui un titolo arriva con
+# la scheda anagrafica completa e senza un solo prezzo - e con essa senza il
+# grafico del prezzo, l'RSI, il confronto con l'indice e lo storico dei
+# multipli, che diventano riquadri vuoti. Un secondo tentativo, e uno su un
+# periodo piu' corto, costano pochi secondi e rimediano quasi sempre.
+PERIODI_DI_RIPIEGO = ("5y", "1y")
+PAUSA_FRA_TENTATIVI = 1.5
+
+
+def _fetch_history(data: StockData, ticker: Any, history_period: str) -> Optional[pd.DataFrame]:
+    """Lo storico giornaliero, insistendo un po' prima di rinunciare.
+
+    auto_adjust=False perche' serve il prezzo grezzo per i multipli storici
+    (P/E, P/B) e l'AdjClose per il rendimento totale.
+    """
+    tentativi = [history_period] + [p for p in PERIODI_DI_RIPIEGO if p != history_period]
+    for indice, periodo in enumerate(tentativi):
+        if indice:
+            # senza pausa il secondo tentativo incontra lo stesso limite del primo
+            time.sleep(PAUSA_FRA_TENTATIVI)
+        etichetta = (L("Price history", "Storico prezzi") if not indice
+                     else L(f"Price history (retry over {periodo})",
+                            f"Storico prezzi (nuovo tentativo su {periodo})"))
+        prezzi = _normalize_prices(
+            _try(data, etichetta, ticker.history, period=periodo, interval="1d",
+                 auto_adjust=False, actions=True)
+        )
+        if prezzi is not None and len(prezzi) > 1:
+            if indice:
+                # Chi legge deve sapere che lo storico e' piu' corto del
+                # richiesto: i grafici piu' lunghi partiranno piu' tardi, e
+                # l'RSI sui periodi lunghi potrebbe non essere calcolabile.
+                data.warnings.append(
+                    L(f"Price history: Yahoo returned only the last {periodo} instead of "
+                      f"{history_period}, so the longest charts start later than usual",
+                      f"Storico prezzi: Yahoo ha restituito solo gli ultimi {periodo} invece di "
+                      f"{history_period}, quindi i grafici piu' lunghi partono piu' tardi del "
+                      "solito")
+                )
+            return prezzi
+    return None
 
 
 def fetch_stock(
@@ -360,19 +411,7 @@ def fetch_stock(
     info = _try(data, L("Company summary", "Scheda anagrafica"), lambda: ticker.info) or {}
     data.info = info if isinstance(info, dict) else {}
 
-    # auto_adjust=False: serve il prezzo grezzo per i multipli storici
-    # (P/E, P/B) e l'AdjClose per il rendimento totale.
-    data.prices = _normalize_prices(
-        _try(
-            data,
-            L("Price history", "Storico prezzi"),
-            ticker.history,
-            period=history_period,
-            interval="1d",
-            auto_adjust=False,
-            actions=True,
-        )
-    )
+    data.prices = _fetch_history(data, ticker, history_period)
 
     if include_benchmark:
         try:

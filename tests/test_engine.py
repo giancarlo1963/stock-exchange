@@ -151,3 +151,104 @@ class TestRSINelRacconto:
         analisi = self._con_coda("solida", 0.985)
         fig = charts.rsi_chart(analisi.metrics, analisi.data.prices)
         assert "oversold" in fig.layout.title.text
+
+
+class TestRSISuPiuPeriodi:
+    """Quattordici sessioni sono una convenzione, non l'unica domanda sensata.
+
+    Chi tiene un titolo per anni vuole la stessa misura sul proprio orizzonte.
+    Ma allungando il periodo la media smorzata schiaccia tutto verso il 50: su
+    un anno di sessioni l'RSI non arriva mai a 70 ne' a 30, e disegnare comunque
+    quelle due righe sarebbe decorazione. Per i periodi lunghi la fascia diventa
+    quindi la meta' centrale della storia del titolo, come per il rendimento e
+    per il P/E.
+    """
+
+    def _fasce(self, fig):
+        """(alto, basso) leggendoli dalle due fasce disegnate."""
+        alta, bassa = fig.layout.shapes[0], fig.layout.shapes[1]
+        return alta.y0, bassa.y1
+
+    def test_a_quattordici_le_soglie_restano_fisse(self):
+        from setxray import charts
+
+        analisi = analyze_data(build_demo("solida"))
+        fig = charts.rsi_chart(analisi.metrics, analisi.data.prices, periodi=14)
+        assert self._fasce(fig) == (70.0, 30.0)
+        assert tuple(fig.layout.yaxis.range) == (0, 100)
+        assert "overbought 70" in fig.to_plotly_json()["layout"]["annotations"][-2]["text"]
+
+    def test_sui_periodi_lunghi_la_fascia_e_la_storia_del_titolo(self):
+        from setxray import charts
+        from setxray.metrics import rsi
+
+        analisi = analyze_data(build_demo("solida"))
+        serie = rsi(analisi.data.prices["Close"], periods=252)
+        fig = charts.rsi_chart(analisi.metrics, analisi.data.prices, periodi=252)
+        alto, basso = self._fasce(fig)
+        assert alto == pytest.approx(float(serie.quantile(0.75)))
+        assert basso == pytest.approx(float(serie.quantile(0.25)))
+        # le soglie fisse qui non verrebbero mai toccate
+        assert 30 < basso < alto < 70
+        assert "middle half" in fig.layout.title.text
+
+    def test_la_fascia_non_si_muove_con_lo_zoom(self):
+        """Una fascia che cambia quando si cambia finestra non e' un
+        riferimento: e' il riflesso di quello che si sta guardando."""
+        from setxray import charts
+
+        analisi = analyze_data(build_demo("solida"))
+        stretta = charts.rsi_chart(analisi.metrics, analisi.data.prices, periodi=252, anni=0.5)
+        larga = charts.rsi_chart(analisi.metrics, analisi.data.prices, periodi=252, anni=5.0)
+        assert self._fasce(stretta) == self._fasce(larga)
+
+    def test_la_finestra_taglia_solo_il_disegno(self):
+        from setxray import charts
+
+        analisi = analyze_data(build_demo("solida"))
+        punti = []
+        for anni in (1.0, 3.0):
+            fig = charts.rsi_chart(analisi.metrics, analisi.data.prices, anni=anni)
+            punti.append(len(fig.data[0].x))
+        assert punti[0] < punti[1], "meno anni, meno punti disegnati"
+
+    def test_il_titolo_dice_il_periodo_in_parole(self):
+        from setxray import charts
+
+        analisi = analyze_data(build_demo("solida"))
+        for periodi, atteso in ((14, "14 sessions"), (126, "6 months"), (756, "3 years")):
+            fig = charts.rsi_chart(analisi.metrics, analisi.data.prices, periodi=periodi)
+            assert atteso in fig.layout.title.text
+
+    def test_storico_troppo_corto_lo_dice(self):
+        """Un riquadro vuoto senza spiegazione sembra un grafico rotto."""
+        from setxray import charts
+
+        analisi = analyze_data(build_demo("solida"))
+        corto = analisi.data.prices.tail(100)
+        fig = charts.rsi_chart(analisi.metrics, corto, periodi=756)
+        scritta = fig.layout.annotations[0].text
+        assert "too short" in scritta and "3 years" in scritta
+
+    def test_ogni_periodo_offerto_e_disegnabile(self):
+        from setxray import charts
+
+        analisi = analyze_data(build_demo("solida"))
+        for periodi in charts.PERIODI_RSI:
+            for anni in charts.FINESTRE_RSI:
+                fig = charts.rsi_chart(analisi.metrics, analisi.data.prices,
+                                       periodi=periodi, anni=anni)
+                assert fig.data, f"{periodi} sessioni su {anni} anni non disegna niente"
+
+    def test_i_nomi_nelle_due_lingue(self):
+        from setxray import charts
+        from setxray.lang import using
+
+        with using("en"):
+            assert charts.nome_periodo(126) == "6 months"
+            assert charts.nome_finestra(0.5) == "last 6 months"
+            assert charts.nome_finestra(1.0) == "last year"
+        with using("it"):
+            assert charts.nome_periodo(126) == "6 mesi"
+            assert charts.nome_finestra(0.5) == "ultimi 6 mesi"
+            assert charts.nome_finestra(3.0) == "ultimi 3 anni"

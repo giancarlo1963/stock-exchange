@@ -107,7 +107,10 @@ def _analyze_cached(symbol: str, risk_free: float, erp: float, lang: str) -> Ana
 
 
 def card(label: str, value: str, note: str = "", colour: str = "") -> str:
-    style = L(f" style='color:{colour}'", f" style='color:{colore}'") if colour else ""
+    # Nessuna L() qui: e' HTML, uguale nelle due lingue. Con la L() la seconda
+    # meta' leggeva una variabile omonima definita altrove nella pagina, e in
+    # italiano la card prendeva il colore del verdetto invece del suo.
+    style = f" style='color:{colour}'" if colour else ""
     return (f"<div class='card'><div class='label'>{label}</div>"
               f"<div class='value'{style}>{value}</div>"
               f"<div class='note'>{note}</div></div>")
@@ -359,6 +362,37 @@ if analisi.data.is_demo:
                  "how the app works. Do not use them to decide anything.",
                  "**Modalita' dimostrativa.** Societa' inventata e numeri sintetici: "
                  "servono solo a mostrare come funziona l'app. Non usarli per decidere."), icon="🧪")
+
+# Yahoo, quando decide che le richieste sono troppe, non risponde con un
+# errore: risponde con una tabella vuota. Cosi' capita che di un titolo arrivi
+# la scheda anagrafica intera - nome, settore, prezzo di oggi - e non arrivi un
+# solo prezzo storico. L'analisi resta in piedi, ma tutto quello che nasce dalla
+# serie dei prezzi (il grafico del prezzo, l'RSI, il confronto con l'indice, lo
+# storico dei multipli) diventa un riquadro vuoto, e chi guarda pensa che manchi
+# il grafico invece del dato. Va detto qui, in cima, una volta, con il pulsante
+# per riprovare accanto: e' un problema che passa da solo dopo qualche minuto.
+_storico = analisi.data.prices
+_sessioni = 0 if _storico is None else len(_storico)
+if not analisi.data.is_demo and _sessioni <= charts.RSI_PERIODS:
+    st.warning(
+        L(f"**Yahoo did not return the daily price history for {m.symbol}** "
+          f"({_sessioni} sessions received; the RSI needs at least "
+          f"{charts.RSI_PERIODS + 1}). Everything based on the price series is empty: the price "
+          "chart, the RSI, the comparison with the index and the history of the multiples. "
+          "The rest of the analysis - dividends, financial statements, valuation - is unaffected. "
+          "It is almost always Yahoo limiting requests, and it passes: try again in a minute.",
+          f"**Yahoo non ha restituito lo storico dei prezzi di {m.symbol}** "
+          f"({_sessioni} sessioni ricevute, all'RSI ne servono almeno "
+          f"{charts.RSI_PERIODS + 1}). Tutto quello che nasce dalla serie dei prezzi resta "
+          "vuoto: il grafico del prezzo, l'RSI, il confronto con l'indice e lo storico dei "
+          "multipli. Il resto dell'analisi - dividendi, bilanci, valutazione - non ne soffre. "
+          "Quasi sempre e' Yahoo che limita le richieste, e passa: riprova fra un minuto."),
+        icon="📉")
+    if st.button(L("Download the prices again", "Riscarica i prezzi"), key="riprova-prezzi"):
+        # Serve svuotare la cache del *risultato*: quella su disco non tiene i
+        # dati senza prezzi, ma l'analisi calcolata resta valida mezz'ora.
+        _analyze_cached.clear()
+        st.rerun()
 
 st.markdown(f"## {m.name}")
 sottotitolo = [f"`{m.symbol}`"]
@@ -684,7 +718,34 @@ with schede[2]:
                 + "</div>", unsafe_allow_html=True)
     st.plotly_chart(charts.price_chart(m, v, analisi.data.prices, scuro), use_container_width=True)
     # L'RSI subito sotto il prezzo: e' la stessa domanda vista da vicino.
-    st.plotly_chart(charts.rsi_chart(m, analisi.data.prices, scuro), use_container_width=True)
+    # I due menu perche' quattordici sessioni sono la convenzione di Wilder, non
+    # una legge di natura: chi tiene un titolo per anni vuole la stessa misura
+    # sul proprio orizzonte. Cambiando periodo cambia anche il modo di leggere
+    # la banda, e il grafico lo spiega da solo.
+    scelte = st.columns(2)
+    _periodi = scelte[0].selectbox(
+        L("RSI period", "Periodo dell'RSI"), charts.PERIODI_RSI,
+        index=charts.PERIODI_RSI.index(charts.RSI_PERIODS),
+        format_func=charts.nome_periodo, key="rsi-periodo",
+        help=L("14 sessions is the convention, and the only period for which the 70/30 "
+               "thresholds mean anything: over more sessions the RSI never reaches them, so "
+               "the chart switches to this stock's own middle half.",
+               "Quattordici sessioni sono la convenzione, e l'unico periodo per cui le soglie "
+               "70/30 vogliono dire qualcosa: su piu' sessioni l'RSI non le raggiunge mai, "
+               "quindi il grafico passa alla meta' centrale della storia del titolo."),
+    )
+    _finestra = scelte[1].selectbox(
+        L("How much history to show", "Quanto storico mostrare"), charts.FINESTRE_RSI,
+        index=charts.FINESTRE_RSI.index(2.0),
+        format_func=charts.nome_finestra, key="rsi-finestra",
+        help=L("Only changes the width of the chart. The band is computed on the full history, "
+               "so zooming does not move it.",
+               "Cambia solo la larghezza del grafico. La fascia si calcola su tutto lo storico, "
+               "quindi lo zoom non la sposta."),
+    )
+    st.plotly_chart(charts.rsi_chart(m, analisi.data.prices, scuro,
+                                     anni=_finestra, periodi=_periodi),
+                    use_container_width=True)
     due = st.columns(2)
     due[0].plotly_chart(charts.multiple_history_chart(m, "pe", scuro), use_container_width=True)
     due[1].plotly_chart(charts.multiple_history_chart(m, "pb", scuro), use_container_width=True)
@@ -802,7 +863,7 @@ with schede[5]:
         L("Dividend yield", "Dividendo"): fmt.pct(m.dividend.get("yield_current")),
         L("Beta against the SET index", "Beta contro indice SET"): fmt.ratio(m.trend.get("beta")),
         L("Annual volatility", "Volatilita' annua"): fmt.pct(m.trend.get("volatility")),
-        L(f"RSI ({charts.RSI_PERIODS} days)", f"RSI ({charts.RSI_PERIODS} giorni)"):
+        L(f"RSI ({charts.RSI_PERIODS} sessions)", f"RSI ({charts.RSI_PERIODS} sessioni)"):
             fmt.num(m.trend.get("rsi"), 0),
         L("Required return (models)", "Rendimento richiesto (modelli)"): fmt.pct(v.cost_of_equity),
     }
