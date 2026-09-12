@@ -88,6 +88,8 @@ python -m setxray --sources             # which archives are active
 python -m setxray AOT --report aot.md   # save the report as markdown
 python -m setxray demo:tagliato         # made-up data, no internet
 python -m setxray PTT --lang it         # in Italian (or SETXRAY_LANG=it)
+python -m setxray --symbols             # every symbol listed on the SET
+python -m setxray --symbols data/set-symbols.csv   # …saved, for offline use
 ```
 
 The flags stay in English — they are an interface, like `--help` — but
@@ -179,6 +181,38 @@ and used instead of the APIs.
 
 Prices, financial statements and cash flows come from Yahoo Finance: coverage
 there is good even on SET stocks.
+
+### Every symbol on the exchange
+
+The symbol box accepts any SET ticker, including one listed yesterday that no
+list knows about yet. Next to it there is a picker over the whole exchange,
+searchable by symbol *or* company name — typing `bank` finds `KBANK` and
+`Bangkok Bank`.
+
+That list comes from three independent routes, in order of trust, and one of
+them never fails:
+
+| Route | Notes |
+|---|---|
+| **SET official website** | The referee. Its interface is undocumented, so the tool tries several addresses and checks the answer looks like a listing (50+ symbols) before believing it. |
+| **Yahoo screener** | Filtered on the Thai exchange, read page by page. If page three fails, the first two are still kept. |
+| **Local CSV** | `data/set-symbols.csv`, one symbol per line or with `symbol,name,sector` columns. Depends on no API. |
+
+If all three are silent the app falls back to the sixteen heavily traded names
+built into the code — and **says so**, because a short list presented as the
+market would be a lie. It also says so when a route returns fewer than a
+hundred symbols: that may be a legitimate watchlist, but it is not the
+exchange.
+
+Two details that matter in use:
+
+- **Opening the page never waits on the network for this.** Querying the SET
+  and the Yahoo screener can take tens of seconds, so the page loads from the
+  local cache or the CSV, and the long route runs only when you press *Fetch
+  every SET symbol*. After that the list is cached on disk for a week.
+- **`python -m setxray --symbols data/set-symbols.csv` makes it permanent.**
+  Run it once, commit the file, and from then on the app starts with the whole
+  exchange even if every API changes its mind tomorrow.
 
 ---
 
@@ -331,13 +365,14 @@ setxray/
   narrative.py         the written analysis + markdown report
   charts.py            nineteen charts (Plotly)
   engine.py            analyze(): the thread that ties it together
+  universe.py          every symbol on the exchange: three routes plus a fallback
   lang.py              the language: one choice, two words for every sentence
   cli.py · demo.py · fmt.py
 mobile/setxray.html    the phone preview: one static page, hand-drawn SVG charts
 tools/export_preview.py  runs the engine on the demo profiles -> mobile/dati.js
 tools/dump_strings.py    prints every string the app shows, in one language
 tools/check_languages.py compares the two languages and reports what lags behind
-tests/                 319 tests, all runnable without a network
+tests/                 362 tests, all runnable without a network
 ```
 
 The phone preview is a static page, so it cannot run Python: the engine's output

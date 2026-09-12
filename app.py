@@ -16,10 +16,11 @@ import pandas as pd
 import streamlit as st
 
 from setxray import __version__, charts, fmt
-from setxray.datasource import clear_cache, popular_set_symbols
+from setxray.datasource import clear_cache
 from setxray.demo import PROFILE_KEYS, profile_names, profiles
 from setxray.engine import Analysis, NoDataError, analyze
 from setxray.lang import CODES, L, NAMES, action_label, normalize, set_language
+from setxray.universe import Universo, load_universe
 from setxray.scoring import BUY, HOLD, SELL
 from setxray.sources import describe_sources
 
@@ -76,6 +77,21 @@ st.markdown("""
   """, unsafe_allow_html=True)
 
 
+@st.cache_data(show_spinner=False, ttl=24 * 3600)
+def _universo_cached(completo: bool, lang: str) -> Universo:
+    """L'elenco dei titoli SET.
+
+    `completo=False` non tocca la rete: legge la cache su disco o il CSV, e se
+    non ci sono si accontenta dell'elenco corto. Interrogare la SET e lo
+    screener di Yahoo puo' costare decine di secondi, e nessuno deve
+    aspettarli per vedere apparire la pagina: la strada lunga si prende solo
+    quando qualcuno la chiede, e da quel momento la cache su disco la rende
+    gratis per una settimana.
+    """
+    set_language(lang)
+    return load_universe(offline=not completo)
+
+
 @st.cache_data(show_spinner=False, ttl=1800)
 def _analyze_cached(symbol: str, risk_free: float, erp: float, lang: str) -> Analysis:
     """Una richiesta per simbolo, ipotesi e lingua: Yahoo non ama le raffiche.
@@ -124,14 +140,44 @@ with st.sidebar:
                                    "facoltativo."))
     avvia = st.button(L("Analyse", "Analizza"), type="primary", use_container_width=True)
 
-    st.markdown(L("**Heavily traded stocks**", "**Titoli molto scambiati**"))
-    colonne = st.columns(2)
-    for i, (codice, descrizione) in enumerate(popular_set_symbols()):
-        if colonne[i % 2].button(codice, key=f"quick-{codice}", help=descrizione,
-                                 use_container_width=True):
-            st.session_state["simbolo"] = codice
-            st.session_state["esegui"] = True
+    # --- scegliere da un elenco invece di indovinare una sigla ------------
+    # La casella sopra resta: accetta qualunque sigla, anche una quotata ieri
+    # che nessun elenco conosce ancora. Questo serve a chi non la sa a memoria.
+    # La rotella solo quando si prende la strada lunga: la prima volta puo'
+    # durare dei secondi, e una pagina ferma senza spiegazione sembra rotta.
+    _completo = bool(st.session_state.get("universo_completo"))
+    if _completo:
+        with st.spinner(L("Fetching every SET symbol...",
+                          "Scarico tutti i simboli della SET...")):
+            _universo = _universo_cached(True, _LINGUA)
+    else:
+        _universo = _universo_cached(False, _LINGUA)
+    _scelto = st.selectbox(
+        L(f"Or pick from the list ({len(_universo)})",
+          f"Oppure scegli dall'elenco ({len(_universo)})"),
+        _universo.titoli, index=None,
+        format_func=lambda titolo: titolo.etichetta(),
+        placeholder=L("Type a symbol or a company name...",
+                      "Scrivi una sigla o un nome di azienda..."),
+        key="scelta-elenco",
+    )
+    if _scelto is not None and _scelto.symbol != st.session_state.get("simbolo"):
+        st.session_state["simbolo"] = _scelto.symbol
+        st.session_state["esegui"] = True
+        st.rerun()
+
+    if _universo.parziale:
+        # L'elenco corto non e' il mercato, e va detto: chi non lo sapesse
+        # penserebbe che alla SET sono quotate sedici societa'.
+        if st.button(L("Fetch every SET symbol", "Scarica tutti i simboli della SET"),
+                     use_container_width=True,
+                     help=L("Asks the SET website and Yahoo once, then keeps the list for a week.",
+                            "Interroga una volta il sito della SET e Yahoo, poi tiene l'elenco "
+                            "per una settimana.")):
+            st.session_state["universo_completo"] = True
+            _universo_cached.clear()
             st.rerun()
+    st.caption(_universo.provenienza())
 
     with st.expander(L("Try it without internet (made-up data)",
                        "Prova senza internet (dati finti)")):

@@ -252,6 +252,43 @@ def _lingua_da_argv(argv: list[str] | None) -> str:
     return set_language(os.environ.get("SETXRAY_LANG"))
 
 
+def print_symbols(destinazione: str | None) -> int:
+    """Stampa l'elenco dei titoli SET, o lo salva in un CSV.
+
+    Salvarlo e' la mossa che lo rende indipendente dalla rete: si scarica una
+    volta, si mette accanto all'app, e da quel momento l'elenco c'e' anche se
+    domani la SET cambia interfaccia.
+    """
+    from setxray.universe import load_universe, salva_csv
+
+    universo = load_universe(ttl_ore=0)
+    if universo.parziale:
+        print(f"{AMBER}" + L("No source answered: this is the built-in short list.",
+                             "Nessuna fonte ha risposto: questo e' l'elenco corto incluso.")
+              + f"{OFF}", file=sys.stderr)
+    for nota in universo.note:
+        print(f"  {nota}", file=sys.stderr)
+
+    if destinazione and destinazione != "-":
+        quanti = salva_csv(universo, destinazione)
+        print(L(f"{quanti} symbols saved to {destinazione}",
+                f"{quanti} simboli salvati in {destinazione}"))
+        print(L("  The app reads it from there: no network needed for the list.",
+                "  L'app lo legge da li': per l'elenco non serve piu' la rete."))
+        return 0
+
+    print()
+    print(f"{BOLD}{universo.provenienza()}{OFF}")
+    print()
+    for titolo in universo.titoli:
+        print(f"  {titolo.symbol:12s} {titolo.name[:52]:52s} {titolo.sector[:18]}")
+    print()
+    print(L("  Save it with:  python -m setxray --symbols data/set-symbols.csv",
+            "  Salvalo con:   python -m setxray --symbols data/set-symbols.csv"))
+    print()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     lingua = _lingua_da_argv(argv)
     parser = argparse.ArgumentParser(
@@ -291,6 +328,9 @@ def main(argv: list[str] | None = None) -> int:
                                                                   "ignora la cache e riscarica"))
     parser.add_argument("--clear-cache", action="store_true", help=L("clear the cache and exit",
                                                                      "svuota la cache ed esce"))
+    parser.add_argument("--symbols", nargs="?", const="-", metavar="FILE",
+                        help=L("list every SET symbol, or save them to FILE as CSV",
+                               "elenca tutti i simboli della SET, o li salva in FILE come CSV"))
     parser.add_argument("--lang", choices=list(CODES), default=lingua,
                         help=L(f"interface language (default {lingua}, or SETXRAY_LANG)",
                                f"lingua dell'interfaccia (predefinita {lingua}, o SETXRAY_LANG)"))
@@ -316,6 +356,9 @@ def main(argv: list[str] | None = None) -> int:
         print(L("  The CSV goes in data/<SYMBOL>-dividends.csv with columns date,dividend\n",
                 "  Il file CSV va in data/<SIMBOLO>-dividends.csv con colonne date,dividend\n"))
         return 0
+
+    if args.symbols is not None:
+        return print_symbols(args.symbols)
 
     if args.clear_cache:
         print(L(f"Cache cleared ({clear_cache()} files).",
