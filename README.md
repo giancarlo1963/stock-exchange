@@ -14,7 +14,18 @@ years, and answers a single question:
 The horizon is **one to two years at the very least**. This is not a trading
 tool.
 
+**In English or in Italian**, with a switch in the sidebar — and the language
+changes every word the tool writes: the analyst's prose, the charts, the report,
+the terminal. It also changes every figure, because the two languages do not
+write numbers the same way (`1,234.50` against `1.234,50`, `98.3bn` against
+`98,3 mld`).
+
 ![Main screen](docs/screenshot-dividends.png)
+
+The same screen with the switch on Italian. Note the numbers, not only the
+words: `62,59 THB`, `+29,3%`, `11/09/2026`.
+
+![Same screen in Italian](docs/screenshot-italian.png)
 
 The case that matters: ten years of payments with the 2020 cut marked in red and
 the estimate for the next two years with its range.
@@ -34,8 +45,9 @@ Where the safety score comes from, factor by factor.
 ## Trying it from a phone
 
 Nothing to install: **[interactive preview](https://claude.ai/code/artifact/a40605c8-4d90-44da-83c7-c7ddcb5fa1a1)**
-with six test companies and the real output of the analysis engine. Synthetic
-data, there to show how the tool reasons.
+with six test companies and the real output of the analysis engine, in either
+language (the EN/IT switch is top right, and it remembers your choice).
+Synthetic data, there to show how the tool reasons.
 
 For **real stocks** the app has to be online, because the analysis runs in
 Python and fetches the data on the spot. That is free on Streamlit Community
@@ -62,24 +74,37 @@ streamlit run app.py
 From the terminal:
 
 ```bash
-python -m setxray PTT                  # full analysis
+python -m setxray PTT                   # full analysis
 python -m setxray PTT --dividends       # the ten-year dividend section only
 python -m setxray --sources             # which archives are active
 python -m setxray AOT --report aot.md   # save the report as markdown
 python -m setxray demo:tagliato         # made-up data, no internet
+python -m setxray PTT --lang it         # in Italian (or SETXRAY_LANG=it)
 ```
+
+The flags stay in English — they are an interface, like `--help` — but
+everything the command prints follows `--lang`.
 
 As a library:
 
 ```python
 from setxray import analyze
+from setxray.lang import using
 
 a = analyze("PTT")
+print(a.dividends.signal.action)            # "BUY" - an identifier, never translated
 print(a.dividends.signal.headline)          # "BUY for the dividend - medium conviction"
 print(a.dividends.yield_stats["attuale"])   # 0.0612
 print(a.dividends.safety.score)             # 71
-print(a.report())
+
+with using("it"):                           # the language is chosen per analysis
+    print(analyze("PTT").report())
 ```
+
+The language is picked when the analysis runs, because the sentences are built
+inside the engine and stored in the result. `action` and the other fields the
+code compares stay stable identifiers in both languages; only the words meant
+for a reader are translated.
 
 ### Without internet
 
@@ -281,21 +306,49 @@ setxray/
   narrative.py         the written analysis + markdown report
   charts.py            eighteen charts (Plotly)
   engine.py            analyze(): the thread that ties it together
+  lang.py              the language: one choice, two words for every sentence
   cli.py · demo.py · fmt.py
 mobile/setxray.html    the phone preview: one static page, hand-drawn SVG charts
 tools/export_preview.py  runs the engine on the demo profiles -> mobile/dati.js
-tests/                 273 tests, all runnable without a network
+tools/dump_strings.py    prints every string the app shows, in one language
+tools/check_languages.py compares the two languages and reports what lags behind
+tests/                 319 tests, all runnable without a network
 ```
 
 The phone preview is a static page, so it cannot run Python: the engine's output
-is computed once and written beside it as a JavaScript file.
+is computed once for both languages and written beside it as a JavaScript file.
 
 ```bash
 python tools/export_preview.py mobile/dati.js
 ```
 
-The interface and every word it prints are in English; the code's own internal
-names and comments are in Italian, the language this was built in.
+### How the two languages are held
+
+The two versions of a sentence are written side by side, where the sentence is
+built:
+
+```python
+out.append(L("It has never reduced the dividend in the 10 years observed.",
+             "Non ha mai ridotto il dividendo nei 10 anni osservati."))
+```
+
+Not a catalogue of keys (`t("dividend.no_cuts")`). The analyst's prose carries
+its grammar inside — singulars, plurals, agreements — so the two languages are
+two sentences, not one sentence with holes in it. Written this way they sit on
+adjacent lines: you cannot change one and forget the other without seeing it.
+
+Everything a reader sees is translated. Everything the code compares is not:
+`action` stays `"BUY"`, dictionary keys stay `"past"` and `"source"`, chart keys
+stay `"dividend_history"`. This is the one real trap of a bilingual tool, and it
+cost us a live bug: a comparison written as `if reliability == "bassa"` kept
+working in Italian and went quiet in English, so one red flag stopped being
+raised. Where the code needs to branch on a value the user also reads, the value
+now comes in two fields — `reliability` for the reader, `reliability_key` for the
+code — and `tools/check_languages.py` renders everything in both languages and
+reports anything that comes out identical.
+
+The code's own internal names and comments stay in Italian, the language this was
+built in.
 
 The charts follow two non-negotiable rules: **never two vertical axes** in the
 same panel (two different units become two charts), and the palette is verified
@@ -310,6 +363,11 @@ python -m pytest tests/ -q
 They never touch the network, and must not: they use the demo profiles, a
 simulated `yfinance` and the real JSON responses of every service recorded as
 fixtures (including Yahoo not answering, empty responses and renamed columns).
+
+`tests/test_lang.py` holds the bilingual ones: that the same analysis produces
+the same numbers, the same structure and the same number of sentences in both
+languages, that no identifier is translated, and that no English-formatted
+number ends up inside an Italian sentence.
 
 ## Limits worth knowing
 

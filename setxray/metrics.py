@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from setxray.datasource import StockData, coerce_float, first_value, latest_close, row, sum_last
+from setxray.lang import L
 
 TRADING_DAYS = 252
 THAI_CORPORATE_TAX = 0.20  # aliquota societaria standard in Thailandia
@@ -823,19 +824,27 @@ def compute_metrics(data: StockData) -> Metrics:
 
     if years.empty:
         metrics.notes.append(
-            "No financial statements available on Yahoo for this stock: the analysis rests "
-            "only on the price and the few figures in the summary. Low reliability."
+            L("No financial statements available on Yahoo for this stock: the analysis rests "
+              "only on the price and the few figures in the summary. Low reliability.",
+              "Nessun bilancio disponibile su Yahoo per questo titolo: l'analisi si basa "
+              "solo sul prezzo e sui pochi indicatori della scheda. Affidabilita' bassa.")
         )
     elif len(years) < 3:
         metrics.notes.append(
-            f"Only {len(years)} financial years available: long-run trends are indicative only."
+            L(f"Only {len(years)} financial years available: long-run trends are indicative only.",
+              f"Solo {len(years)} esercizi di bilancio disponibili: le tendenze di lungo "
+              "periodo sono indicative.")
         )
     if metrics.is_financial:
         metrics.notes.append(
-            "Financial stock: EV/EBITDA and net debt are not meaningful, so the verdict leans "
-            "more on P/B, ROE and the quality of earnings."
+            L("Financial stock: EV/EBITDA and net debt are not meaningful, so the verdict leans "
+              "more on P/B, ROE and the quality of earnings.",
+              "Titolo finanziario: EV/EBITDA e debito netto non sono significativi, "
+              "il giudizio pesa piu' su P/B, ROE e qualita' degli utili.")
         )
     if ttm.get("eps") is not None and ttm["eps"] <= 0:
-        metrics.notes.append("Negative earnings per share over the last 12 months: the P/E "
-                             "cannot be computed.")
+        metrics.notes.append(L("Negative earnings per share over the last 12 months: the P/E "
+                               "cannot be computed.",
+                               "Utile per azione negativo negli ultimi 12 mesi: il P/E non e' "
+                               "calcolabile."))
     return metrics

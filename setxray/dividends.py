@@ -34,6 +34,9 @@ import pandas as pd
 
 from setxray.metrics import Metrics, cagr, safe_div
 from setxray.sources.base import DividendSet
+from setxray import fmt
+from setxray.lang import L, action_label
+from setxray.scoring import BUY, HOLD, SELL
 
 ANNI_STORIA = 10
 # Rendimento obiettivo che rende sensato comprare un titolo da reddito, oltre
@@ -537,92 +540,127 @@ def _safety(tabella: pd.DataFrame, streaks: dict, growth: dict, metrics: Metrics
     # --- quota di utili distribuita -------------------------------------
     payout = mediana("payout")
     punti, testo = _band_from_points(payout, (
-        (0.40, 15.0, "pays out less than 40% of earnings: plenty of room"),
-        (0.60, 10.0, "pays out 40-60% of earnings: ample room"),
-        (0.75, 4.0, "pays out 60-75% of earnings: normal room"),
-        (0.90, -8.0, "pays out more than 75% of earnings: little room"),
-        (1.05, -18.0, "pays out nearly all of its earnings: no room left"),
-        (99.0, -28.0, "pays out more than it earns: not sustainable for long"),
-    ), 0.0, "share of earnings paid out cannot be computed")
+        (0.40, 15.0, L("pays out less than 40% of earnings: plenty of room",
+                       "distribuisce meno del 40% degli utili: molto margine")),
+        (0.60, 10.0, L("pays out 40-60% of earnings: ample room",
+                       "distribuisce fra il 40% e il 60% degli utili: margine ampio")),
+        (0.75, 4.0, L("pays out 60-75% of earnings: normal room",
+                      "distribuisce fra il 60% e il 75% degli utili: margine normale")),
+        (0.90, -8.0, L("pays out more than 75% of earnings: little room",
+                       "distribuisce oltre il 75% degli utili: poco margine")),
+        (1.05, -18.0, L("pays out nearly all of its earnings: no room left",
+                        "distribuisce quasi tutto l'utile: nessun margine")),
+        (99.0, -28.0, L("pays out more than it earns: not sustainable for long",
+                        "distribuisce piu' di quanto guadagna: insostenibile a lungo")),
+    ), 0.0, L("share of earnings paid out cannot be computed",
+              "quota di utili distribuita non calcolabile"))
     punteggio += punti
-    fattori.append(Factor("Share of earnings paid out (3-year median)", payout, punti, testo))
+    fattori.append(Factor(L("Share of earnings paid out (3-year median)",
+                            "Quota di utili distribuita (mediana 3 anni)"), payout, punti, testo))
 
     # --- copertura con la cassa vera ------------------------------------
     copertura = mediana("copertura_cassa")
     if copertura is None and dps_indicato and metrics.ttm.get("fcf") and metrics.shares:
         copertura = safe_div(metrics.ttm["fcf"] / metrics.shares, dps_indicato)
     punti, testo = _band_from_points(copertura, (
-        (0.0, -26.0, "free cash flow is negative: the dividend is funded entirely by debt, "
-                     "asset sales or reserves"),
-        (0.70, -22.0, "free cash flow covers less than 70% of the dividend: debt funds the rest"),
-        (1.00, -10.0, "free cash flow does not fully cover the dividend"),
-        (1.20, 3.0, "free cash flow barely covers the dividend"),
-        (1.50, 8.0, "free cash flow covers the dividend with a fair margin"),
-        (2.00, 12.0, "free cash flow covers the dividend comfortably"),
-        (99.0, 15.0, "free cash flow is far above the dividend"),
-    ), 0.0, "cash coverage cannot be computed")
+        (0.0, -26.0, L("free cash flow is negative: the dividend is funded entirely by debt, "
+                       "asset sales or reserves",
+                       "la cassa libera e' negativa: il dividendo e' interamente finanziato "
+                       "da debito, cessioni o riserve")),
+        (0.70, -22.0, L("free cash flow covers less than 70% of the dividend: debt funds the rest",
+                        "la cassa libera copre meno del 70% del dividendo: lo finanzia il debito")),
+        (1.00, -10.0, L("free cash flow does not fully cover the dividend",
+                        "la cassa libera non copre del tutto il dividendo")),
+        (1.20, 3.0, L("free cash flow barely covers the dividend",
+                      "la cassa libera copre appena il dividendo")),
+        (1.50, 8.0, L("free cash flow covers the dividend with a fair margin",
+                      "la cassa libera copre il dividendo con un margine discreto")),
+        (2.00, 12.0, L("free cash flow covers the dividend comfortably",
+                       "la cassa libera copre il dividendo con largo margine")),
+        (99.0, 15.0, L("free cash flow is far above the dividend",
+                       "la cassa libera e' molto superiore al dividendo")),
+    ), 0.0, L("cash coverage cannot be computed", "copertura con la cassa non calcolabile"))
     punteggio += punti
-    fattori.append(Factor("Free cash flow coverage (3-year median)", copertura,
+    fattori.append(Factor(L("Free cash flow coverage (3-year median)",
+                            "Copertura con la cassa libera (mediana 3 anni)"), copertura,
                           punti, testo, fmt="x"))
 
     # --- debito ----------------------------------------------------------
     debito = metrics.health.get("net_debt_ebitda")
     if metrics.is_financial:
-        fattori.append(Factor("Net debt / EBITDA", None, 0.0,
-                              "financial stock: the measure does not apply", fmt="x"))
+        fattori.append(Factor(L("Net debt / EBITDA", "Debito netto / EBITDA"), None, 0.0,
+                              L("financial stock: the measure does not apply",
+                                "titolo finanziario: l'indicatore non e' applicabile"), fmt="x"))
     else:
         punti, testo = _band_from_points(debito, (
-            (1.00, 10.0, "very low debt: the dividend does not compete with the banks"),
-            (2.00, 6.0, "contained debt"),
-            (3.00, 0.0, "debt within the norm"),
-            (4.00, -8.0, "high debt: in a hard year the dividend is the first thing to give"),
-            (999.0, -18.0, "very high debt: the dividend ranks behind servicing it"),
-        ), 0.0, "net debt cannot be computed")
+            (1.00, 10.0, L("very low debt: the dividend does not compete with the banks",
+                           "debito molto basso: il dividendo non compete con le banche")),
+            (2.00, 6.0, L("contained debt", "debito contenuto")),
+            (3.00, 0.0, L("debt within the norm", "debito nella norma")),
+            (4.00, -8.0, L("high debt: in a hard year the dividend is the first thing to give",
+                           "debito elevato: in un anno difficile il dividendo e' il primo a cedere")),
+            (999.0, -18.0, L("very high debt: the dividend ranks behind servicing it",
+                             "debito molto elevato: il dividendo e' subordinato al servizio del "
+                             "debito")),
+        ), 0.0, L("net debt cannot be computed", "debito netto non calcolabile"))
         punteggio += punti
-        fattori.append(Factor("Net debt / EBITDA", debito, punti, testo, fmt="x"))
+        fattori.append(Factor(L("Net debt / EBITDA",
+                                "Debito netto / EBITDA"), debito, punti, testo, fmt="x"))
 
     # --- andamento degli utili ------------------------------------------
     eps_cagr = metrics.growth.get("eps_cagr")
     punti, testo = _band_from_points(eps_cagr, (
-        (-0.10, -14.0, "earnings falling sharply: today's dividend gets harder every year"),
-        (0.00, -6.0, "earnings falling"),
-        (0.05, 3.0, "earnings stable"),
-        (99.0, 8.0, "earnings growing: the dividend has room to rise"),
-    ), 0.0, "earnings trend cannot be computed")
+        (-0.10, -14.0, L("earnings falling sharply: today's dividend gets harder every year",
+                         "utili in forte calo: il dividendo attuale e' sempre piu' difficile")),
+        (0.00, -6.0, L("earnings falling", "utili in calo")),
+        (0.05, 3.0, L("earnings stable", "utili stabili")),
+        (99.0, 8.0, L("earnings growing: the dividend has room to rise",
+                      "utili in crescita: il dividendo ha spazio per salire")),
+    ), 0.0, L("earnings trend cannot be computed", "andamento degli utili non calcolabile"))
     punteggio += punti
-    fattori.append(Factor("Average earnings per share growth", eps_cagr, punti, testo))
+    fattori.append(Factor(L("Average earnings per share growth",
+                            "Crescita media dell'utile per azione"), eps_cagr, punti, testo))
 
     # --- storia dei tagli ------------------------------------------------
     anni_dal_taglio = streaks.get("anni_dall_ultimo_taglio")
     tagli = streaks.get("tagli")
     if tagli is None:
-        punti, testo = 0.0, "cut history cannot be reconstructed"
+        punti, testo = 0.0, L("cut history cannot be reconstructed",
+                              "storia dei tagli non ricostruibile")
     elif tagli == 0:
-        punti, testo = 10.0, f"no cut in the {streaks.get('anni_osservati', 0)} years observed"
+        punti, testo = 10.0, L(f"no cut in the {streaks.get('anni_osservati', 0)} years observed",
+                               f"nessun taglio negli {streaks.get('anni_osservati', 0)} anni "
+                               f"osservati")
     elif anni_dal_taglio is not None and anni_dal_taglio <= 3:
-        punti, testo = -12.0, f"cut the dividend {anni_dal_taglio} years ago"
+        punti, testo = -12.0, L(f"cut the dividend {anni_dal_taglio} years ago",
+                                f"ha tagliato il dividendo {anni_dal_taglio} anni fa")
     else:
-        parola = "cut" if tagli == 1 else "cuts"
-        punti, testo = 2.0, (f"{tagli} {parola} in the past, but none in the last "
-                             f"{anni_dal_taglio} years")
+        parola = L("cut", "taglio") if tagli == 1 else L("cuts", "tagli")
+        punti, testo = 2.0, (L(f"{tagli} {parola} in the past, but none in the last "
+                               f"{anni_dal_taglio} years",
+                               f"{tagli} {parola} in passato, ma nessuno negli ultimi "
+                               f"{anni_dal_taglio} anni"))
     punteggio += punti
-    fattori.append(Factor("Cut history", float(tagli) if tagli is not None else None,
+    fattori.append(Factor(L("Cut history",
+                            "Storia dei tagli"), float(tagli) if tagli is not None else None,
                           punti, testo, fmt="num"))
 
     # --- continuita' del pagamento ---------------------------------------
     saltati = streaks.get("anni_saltati")
     osservati = streaks.get("anni_osservati") or 0
     if saltati is None:
-        punti, testo = 0.0, "continuity cannot be reconstructed"
+        punti, testo = 0.0, L("continuity cannot be reconstructed",
+                              "continuita' non ricostruibile")
     elif saltati == 0:
-        punti, testo = 8.0, "paid in every year observed"
+        punti, testo = 8.0, L("paid in every year observed", "ha pagato in ogni anno osservato")
     else:
         # Sei punti per ogni anno saltato: chi salta quattro anni su dieci non
         # e' un titolo da reddito, per quanto sia basso il payout quando paga.
         punti = max(-22.0, -6.0 * saltati)
-        testo = f"skipped {saltati} of {osservati} years: payment is not dependable"
+        testo = L(f"skipped {saltati} of {osservati} years: payment is not dependable",
+                  f"ha saltato {saltati} anni su {osservati}: pagamento non affidabile")
     punteggio += punti
-    fattori.append(Factor("Payment continuity",
+    fattori.append(Factor(L("Payment continuity", "Continuita' del pagamento"),
                           float(saltati) if saltati is not None else None, punti, testo, fmt="num"))
 
     # --- crescita del dividendo ------------------------------------------
@@ -633,13 +671,15 @@ def _safety(tabella: pd.DataFrame, streaks: dict, growth: dict, metrics: Metrics
                           if v is not None]
     crescita = min(candidate_crescita) if candidate_crescita else growth.get("cagr_3y")
     punti, testo = _band_from_points(crescita, (
-        (-0.02, -8.0, "the dividend is shrinking over time"),
-        (0.00, -2.0, "the dividend is flat"),
-        (0.05, 3.0, "the dividend grows slowly"),
-        (99.0, 6.0, "the dividend grows at a good pace"),
-    ), 0.0, "dividend growth cannot be computed")
+        (-0.02, -8.0, L("the dividend is shrinking over time",
+                        "il dividendo si sta riducendo nel tempo")),
+        (0.00, -2.0, L("the dividend is flat", "il dividendo e' fermo")),
+        (0.05, 3.0, L("the dividend grows slowly", "il dividendo cresce lentamente")),
+        (99.0, 6.0, L("the dividend grows at a good pace", "il dividendo cresce a buon ritmo")),
+    ), 0.0, L("dividend growth cannot be computed", "crescita del dividendo non calcolabile"))
     punteggio += punti
-    fattori.append(Factor("Average dividend growth", crescita, punti, testo))
+    fattori.append(Factor(L("Average dividend growth",
+                            "Crescita media del dividendo"), crescita, punti, testo))
 
     punteggio = max(0.0, min(100.0, punteggio))
     # Tetto per i pagatori irregolari. Chi salta anni non e' un titolo da
@@ -651,24 +691,36 @@ def _safety(tabella: pd.DataFrame, streaks: dict, growth: dict, metrics: Metrics
         tetto = 35.0 if saltati >= 3 else 45.0
         if punteggio > tetto:
             fattori.append(Factor(
-                "Cap for irregular payment", float(saltati), tetto - punteggio,
-                f"with {saltati} years skipped the score cannot exceed {tetto:.0f}: "
-                "continuity comes before every other factor", fmt="num"))
+                L("Cap for irregular payment",
+                  "Tetto per pagamento irregolare"), float(saltati), tetto - punteggio,
+                L(f"with {saltati} years skipped the score cannot exceed {tetto:.0f}: "
+                  "continuity comes before every other factor",
+                  f"con {saltati} anni saltati il punteggio non puo' superare {tetto:.0f}: "
+                  "la continuita' viene prima di ogni altro fattore"), fmt="num"))
             punteggio = tetto
-    banda = "solid" if punteggio >= 65 else "watch closely" if punteggio >= 45 else "at risk"
+    banda = L("solid",
+              "solido") if punteggio >= 65 else L("watch closely",
+                                                           "da tenere d'occhio") if punteggio >= 45 else L("at risk",
+                                                                                      "a rischio")
 
     # --- avvisi che valgono da soli --------------------------------------
     innesci: list[str] = []
     utile_ttm = metrics.ttm.get("net_income")
     if utile_ttm is not None and utile_ttm < 0:
-        innesci.append("The company is loss-making over the last twelve months: any dividend "
-                       "comes out of reserves or debt.")
+        innesci.append(L("The company is loss-making over the last twelve months: any dividend "
+                         "comes out of reserves or debt.",
+                         "L'azienda e' in perdita negli ultimi dodici mesi: qualunque dividendo "
+                         "esce dalle riserve o dal debito."))
     if payout is not None and payout > 1.1:
-        innesci.append(f"It pays out {payout:.0%} of earnings: above 100% the dividend is not "
-                       "funded by the year's result.")
+        innesci.append(L(f"It pays out {payout:.0%} of earnings: above 100% the dividend is not "
+                         "funded by the year's result.",
+                         f"Distribuisce il {payout:.0%} degli utili: oltre il 100% il dividendo "
+                         "non e' finanziato dal risultato dell'anno."))
     if copertura is not None and copertura < 0.7:
-        innesci.append("Free cash flow covers less than 70% of the dividend: the rest comes "
-                       "from debt, asset sales or reserves.")
+        innesci.append(L("Free cash flow covers less than 70% of the dividend: the rest comes "
+                         "from debt, asset sales or reserves.",
+                         "La cassa libera copre meno del 70% del dividendo: la differenza arriva "
+                         "da debito, cessioni o riserve."))
     rendimento_attuale = yield_stats.get("attuale")
     mediana_rendimento = yield_stats.get("mediana")
     rischio = 100.0 - punteggio
@@ -678,16 +730,25 @@ def _safety(tabella: pd.DataFrame, streaks: dict, growth: dict, metrics: Metrics
         # al +100% perche' a due volte la mediana il taglio e' spesso gia'
         # annunciato, e allora l'avviso arriva tardi.
         rischio += 15.0
-        innesci.append(f"The yield ({rendimento_attuale:.1%}) is "
-                       f"{rendimento_attuale / mediana_rendimento:.1f} times the historical median "
-                       f"({mediana_rendimento:.1%}): when the payout yields far more than usual, "
-                       "the market is normally already pricing in a cut.")
+        innesci.append(L(f"The yield ({fmt.pct(rendimento_attuale)}) is "
+                         f"{fmt.num(rendimento_attuale / mediana_rendimento, 1)} times the "
+                         f"historical median "
+                         f"({fmt.pct(mediana_rendimento)}): when the payout yields far more than "
+                         f"usual, "
+                         "the market is normally already pricing in a cut.",
+                         f"Il rendimento ({fmt.pct(rendimento_attuale)}) e' "
+                         f"{fmt.num(rendimento_attuale / mediana_rendimento, 1)} volte la mediana "
+                         f"storica "
+                         f"({fmt.pct(mediana_rendimento)}): quando la cedola rende molto piu' del "
+                         "solito, di norma il mercato sta gia' scontando un taglio."))
     if utile_ttm is not None and utile_ttm < 0:
         rischio += 15.0
     if payout is not None and payout > 1.1:
         rischio += 10.0
     rischio = max(0.0, min(100.0, rischio))
-    banda_rischio = "low" if rischio < 25 else "medium" if rischio < 55 else "high"
+    banda_rischio = (L("low", "basso") if rischio < RISCHIO_MEDIO
+                     else L("medium", "medio") if rischio < RISCHIO_ALTO
+                     else L("high", "alto"))
 
     return DividendSafety(score=punteggio, band=banda, factors=fattori,
                           hard_triggers=innesci, cut_risk_band=banda_rischio,
@@ -704,8 +765,10 @@ def _forecast(tabella: pd.DataFrame, growth: dict, metrics: Metrics,
     completi = tabella[tabella["completo"]] if not tabella.empty else pd.DataFrame()
     paganti = completi[completi["dps"] > 0] if not completi.empty else pd.DataFrame()
     if dps_indicato is None or dps_indicato <= 0 or paganti.empty:
-        previsione.note = ("Without a dividend history there is no way to estimate the next "
-                           "payments.")
+        previsione.note = (L("Without a dividend history there is no way to estimate the next "
+                             "payments.",
+                             "Senza una storia di dividendi non e' possibile stimare i prossimi "
+                             "pagamenti."))
         return previsione
 
     # --- metodo 1: tendenza, smorzata ------------------------------------
@@ -718,13 +781,18 @@ def _forecast(tabella: pd.DataFrame, growth: dict, metrics: Metrics,
         # passato, e una retta sui logaritmi estrapola con troppa sicurezza.
         crescita = max(-0.15, min(0.15, crescita_storica * 0.6))
         previsione.methods.append(ForecastMethod(
-            "Damped historical trend", dps_indicato * (1 + crescita), 0.40,
-            f"historical growth {crescita_storica:+.1%} over {len(finestra)} years, "
-            f"taken at 60% ({crescita:+.1%})"))
+            L("Damped historical trend",
+              "Tendenza storica smorzata"), dps_indicato * (1 + crescita), 0.40,
+            L(f"historical growth {fmt.pct(crescita_storica, sign=True)} over {len(finestra)} "
+              f"years, "
+              f"taken at 60% ({fmt.pct(crescita, sign=True)})",
+              f"crescita storica {fmt.pct(crescita_storica, sign=True)} su {len(finestra)} anni, "
+              f"usata al 60% ({fmt.pct(crescita, sign=True)})")))
     else:
         previsione.methods.append(ForecastMethod(
-            "Damped historical trend", None,
-            skipped_reason="at least 3 complete dividend years are needed"))
+            L("Damped historical trend", "Tendenza storica smorzata"), None,
+            skipped_reason=L("at least 3 complete dividend years are needed",
+                             "servono almeno 3 anni completi di dividendi")))
 
     # --- metodo 2: quota di utili ----------------------------------------
     eps_atteso = metrics.estimates.get("eps_forward") or metrics.ttm.get("eps")
@@ -735,12 +803,15 @@ def _forecast(tabella: pd.DataFrame, growth: dict, metrics: Metrics,
         # Un salto oltre il 40% in un anno non e' una previsione, e' rumore.
         valore = max(dps_indicato * 0.60, min(dps_indicato * 1.40, grezzo))
         previsione.methods.append(ForecastMethod(
-            "Payout ratio on expected earnings", valore, 0.35,
-            f"expected earnings {eps_atteso:.2f} x historical payout {payout_storico:.0%}"))
+            L("Payout ratio on expected earnings",
+              "Quota di utili sull'utile atteso"), valore, 0.35,
+            L(f"expected earnings {fmt.num(eps_atteso)} x historical payout {payout_storico:.0%}",
+              f"utile atteso {fmt.num(eps_atteso)} x payout storico {payout_storico:.0%}")))
     else:
         previsione.methods.append(ForecastMethod(
-            "Payout ratio on expected earnings", None,
-            skipped_reason="expected earnings or historical payout not available"))
+            L("Payout ratio on expected earnings", "Quota di utili sull'utile atteso"), None,
+            skipped_reason=L("expected earnings or historical payout not available",
+                             "utile atteso o payout storico non disponibili")))
 
     # --- metodo 3: quanto ne consente la cassa ---------------------------
     fcf_ps = (metrics.ttm.get("fcf") / metrics.shares
@@ -755,12 +826,14 @@ def _forecast(tabella: pd.DataFrame, growth: dict, metrics: Metrics,
     if fcf_ps and fcf_ps > 0 and quota_cassa:
         valore = max(dps_indicato * 0.50, min(dps_indicato * 1.40, fcf_ps * quota_cassa))
         previsione.methods.append(ForecastMethod(
-            "Share of free cash flow", valore, 0.25,
-            f"free cash flow per share {fcf_ps:.2f} x historical share {quota_cassa:.0%}"))
+            L("Share of free cash flow", "Quota della cassa libera"), valore, 0.25,
+            L(f"free cash flow per share {fmt.num(fcf_ps)} x historical share {quota_cassa:.0%}",
+              f"cassa libera per azione {fmt.num(fcf_ps)} x quota storica {quota_cassa:.0%}")))
     else:
         previsione.methods.append(ForecastMethod(
-            "Share of free cash flow", None,
-            skipped_reason="free cash flow per share unavailable or negative"))
+            L("Share of free cash flow", "Quota della cassa libera"), None,
+            skipped_reason=L("free cash flow per share unavailable or negative",
+                             "cassa libera per azione non disponibile o negativa")))
 
     utilizzabili = [m for m in previsione.methods if m.usable]
     if not utilizzabili:
@@ -771,8 +844,10 @@ def _forecast(tabella: pd.DataFrame, growth: dict, metrics: Metrics,
         previsione.year2_low = dps_indicato * 0.6
         previsione.year2_high = dps_indicato * 1.25
         previsione.growth = 0.0
-        previsione.note = ("No method applies: the forecast assumes today's dividend is "
-                           "maintained, with a wide range.")
+        previsione.note = (L("No method applies: the forecast assumes today's dividend is "
+                             "maintained, with a wide range.",
+                             "Nessun metodo applicabile: la previsione assume il dividendo "
+                             "attuale confermato, con una forchetta larga."))
         return previsione
 
     peso_totale = sum(m.weight for m in utilizzabili) or 1.0
@@ -794,14 +869,16 @@ def _forecast(tabella: pd.DataFrame, growth: dict, metrics: Metrics,
     previsione.year2_high = previsione.year1_high * (1 + dispersione * 0.5)
     previsione.year2_low = previsione.year1_low * (1 - dispersione * 0.5)
 
-    if safety.cut_risk_band == "high":
+    if rischio_alto(safety):
         # Scenario pessimistico esplicito: un taglio del 40%, che e' l'ordine
         # di grandezza tipico quando un'azienda taglia davvero.
         previsione.year1_low = min(previsione.year1_low, dps_indicato * 0.60)
         previsione.year2_low = min(previsione.year2_low, dps_indicato * 0.50)
-        previsione.note = ("Cut risk is high: the pessimistic case assumes the dividend is "
-                           "reduced by 40-50%.")
-    elif safety.cut_risk_band == "medium":
+        previsione.note = (L("Cut risk is high: the pessimistic case assumes the dividend is "
+                             "reduced by 40-50%.",
+                             "Il rischio di taglio e' alto: lo scenario pessimistico assume una "
+                             "riduzione del 40-50% del dividendo."))
+    elif rischio_medio(safety):
         previsione.year1_low = min(previsione.year1_low, dps_indicato * 0.80)
         previsione.year2_low = min(previsione.year2_low, dps_indicato * 0.75)
     return previsione
@@ -832,11 +909,33 @@ def _forward_total_return(chiusure: pd.Series, payments: pd.Series,
     return quote * ultimo / primo - 1.0
 
 
-ETICHETTE_SEGNALE = (
-    "High yield (buy signal)",
-    "Middling yield",
-    "Low yield (sell signal)",
-)
+# Le due soglie del rischio di taglio. Il resto del modulo le interroga con i
+# due predicati qui sotto e non confrontando la banda: la banda e' testo che
+# l'utente legge, e cambia con la lingua - un confronto su quella si
+# romperebbe in silenzio il giorno in cui si aggiunge una lingua.
+RISCHIO_MEDIO = 25.0
+RISCHIO_ALTO = 55.0
+
+
+def rischio_alto(safety: DividendSafety) -> bool:
+    return safety.cut_risk_score >= RISCHIO_ALTO
+
+
+def rischio_medio(safety: DividendSafety) -> bool:
+    return RISCHIO_MEDIO <= safety.cut_risk_score < RISCHIO_ALTO
+
+
+def etichette_segnale() -> tuple[str, str, str]:
+    """I tre gruppi della verifica retrospettiva, dal piu' generoso al meno.
+
+    Funzione e non costante: l'etichetta e' testo che l'utente legge, e la
+    lingua si sceglie a ogni analisi, non all'import del modulo.
+    """
+    return (
+        L("High yield (buy signal)", "Rendimento alto (segnale di acquisto)"),
+        L("Middling yield", "Rendimento intermedio"),
+        L("Low yield (sell signal)", "Rendimento basso (segnale di vendita)"),
+    )
 
 
 def _backtest(daily: Optional[pd.Series], prices: Optional[pd.DataFrame],
@@ -850,9 +949,12 @@ def _backtest(daily: Optional[pd.Series], prices: Optional[pd.DataFrame],
     affermata.
     """
     risultato = YieldBacktest()
+    gruppi = etichette_segnale()
     if daily is None or prices is None or prices.empty or payments.empty:
-        risultato.note = ("A backtest needs at least five years of prices and dividends: there "
-                          "is not enough data here.")
+        risultato.note = (L("A backtest needs at least five years of prices and dividends: there "
+                            "is not enough data here.",
+                            "Servono almeno cinque anni di prezzi e dividendi per una verifica "
+                            "retrospettiva: i dati disponibili non bastano."))
         return risultato
     chiusure = prices["Close"].dropna()
     fine_dati = chiusure.index[-1]
@@ -871,21 +973,23 @@ def _backtest(daily: Optional[pd.Series], prices: Optional[pd.DataFrame],
         if futuro is None:
             continue
         if percentile >= 0.75:
-            etichetta = ETICHETTE_SEGNALE[0]
+            etichetta = gruppi[0]
         elif percentile <= 0.25:
-            etichetta = ETICHETTE_SEGNALE[2]
+            etichetta = gruppi[2]
         else:
-            etichetta = ETICHETTE_SEGNALE[1]
+            etichetta = gruppi[1]
         osservazioni.append((etichetta, futuro))
 
     if len(osservazioni) < 24:
         risultato.observations = len(osservazioni)
-        risultato.note = (f"Only {len(osservazioni)} usable observations: too few to say "
-                          "anything. More price and dividend history is needed.")
+        risultato.note = (L(f"Only {len(osservazioni)} usable observations: too few to say "
+                            "anything. More price and dividend history is needed.",
+                            f"Solo {len(osservazioni)} osservazioni utilizzabili: troppo poche "
+                            "per dire qualcosa. Serve piu' storia di prezzi e dividendi."))
         return risultato
 
     tabella = pd.DataFrame(osservazioni, columns=["segnale", "rendimento"])
-    for etichetta in ETICHETTE_SEGNALE:
+    for etichetta in gruppi:
         gruppo = tabella[tabella["segnale"] == etichetta]["rendimento"]
         risultato.buckets.append(BacktestBucket(
             label=etichetta, observations=int(len(gruppo)),
@@ -895,16 +999,21 @@ def _backtest(daily: Optional[pd.Series], prices: Optional[pd.DataFrame],
         ))
     risultato.observations = int(len(tabella))
     risultato.years_covered = float((mensili.index[-1] - mensili.index[0]).days / 365.25)
-    alto = next((b for b in risultato.buckets if b.label == ETICHETTE_SEGNALE[0]), None)
-    basso = next((b for b in risultato.buckets if b.label == ETICHETTE_SEGNALE[2]), None)
+    alto = next((b for b in risultato.buckets if b.label == gruppi[0]), None)
+    basso = next((b for b in risultato.buckets if b.label == gruppi[2]), None)
     if alto and basso and alto.avg_return_2y is not None and basso.avg_return_2y is not None:
         risultato.separation = alto.avg_return_2y - basso.avg_return_2y
     risultato.usable = all(b.observations >= 6 for b in risultato.buckets if b.observations)
     risultato.note = (
-        f"{risultato.observations} monthly observations over {risultato.years_covered:.0f} years, "
-        "with overlapping two-year windows: the independent observations are far fewer than the "
-        "count suggests. One stock, one period: this is a hint about how this stock behaved, not "
-        "a rule that holds in general."
+        L(f"{risultato.observations} monthly observations over {risultato.years_covered:.0f} "
+          f"years, "
+          "with overlapping two-year windows: the independent observations are far fewer than the "
+          "count suggests. One stock, one period: this is a hint about how this stock behaved, not "
+          "a rule that holds in general.",
+          f"{risultato.observations} osservazioni mensili su {risultato.years_covered:.0f} anni, "
+          "con finestre di due anni che si sovrappongono: le osservazioni indipendenti sono molte "
+          "meno di quelle contate. Un titolo solo, un periodo solo: e' un indizio su come si e' "
+          "comportato questo titolo, non una regola valida in generale.")
     )
     return risultato
 
@@ -927,10 +1036,13 @@ def _signal(metrics: Metrics, tabella: pd.DataFrame, yield_stats: dict, growth: 
 
     mediana = yield_stats.get("mediana")
     if not prezzo or not previsione.ok or not mediana:
-        segnale.headline = "HOLD - not enough data for a dividend signal"
+        segnale.headline = L("HOLD - not enough data for a dividend signal",
+                             "MANTIENI - dati insufficienti per un segnale sui dividendi")
         segnale.reasons.append(
-            "Without a historical median yield or a dividend forecast there is no way to say "
-            "whether today's price is generous or expensive.")
+            L("Without a historical median yield or a dividend forecast there is no way to say "
+              "whether today's price is generous or expensive.",
+              "Senza una mediana storica del rendimento o senza una previsione del dividendo "
+              "non e' possibile dire se il prezzo di oggi sia generoso o caro."))
         return segnale
 
     # Il rendimento obiettivo non e' la mediana storica secca. Un dividendo
@@ -954,7 +1066,7 @@ def _signal(metrics: Metrics, tabella: pd.DataFrame, yield_stats: dict, growth: 
     # Quando un taglio e' probabile, il titolo va valutato sul dividendo
     # *tagliato*, non su quello di oggi: e' lo scenario che il mercato sta
     # scontando, ed e' l'errore piu' costoso di un modello sui dividendi.
-    scenario_taglio = safety.cut_risk_band == "high"
+    scenario_taglio = rischio_alto(safety)
     dps_valutazione = (previsione.year1_low if scenario_taglio and previsione.year1_low
                        else previsione.year1_base)
     dps_secondo_anno = (previsione.year2_low if scenario_taglio and previsione.year2_low
@@ -984,111 +1096,159 @@ def _signal(metrics: Metrics, tabella: pd.DataFrame, yield_stats: dict, growth: 
     atteso = segnale.expected_return_2y
     if atteso >= 0.30:
         punti += 2.0
-        motivi.append(f"Very high total expected return over two years ({atteso:+.0%}): "
-                      f"{segnale.income_component:+.0%} from dividends and "
-                      f"{segnale.price_component:+.0%} from the yield moving back towards its "
-                      f"{obiettivo:.1%} target.")
+        motivi.append(L(f"Very high total expected return over two years ({atteso:+.0%}): "
+                        f"{segnale.income_component:+.0%} from dividends and "
+                        f"{segnale.price_component:+.0%} from the yield moving back towards its "
+                        f"{fmt.pct(obiettivo)} target.",
+                        f"Rendimento complessivo atteso a due anni molto alto ({atteso:+.0%}): "
+                        f"{segnale.income_component:+.0%} di cedole e "
+                        f"{segnale.price_component:+.0%} "
+                        f"dal ritorno del rendimento verso l'obiettivo del {fmt.pct(obiettivo)}."))
     elif atteso >= 0.18:
         punti += 1.5
-        motivi.append(f"Attractive total expected return over two years ({atteso:+.0%}), of "
-                      f"which {segnale.income_component:+.0%} collected as dividends.")
+        motivi.append(L(f"Attractive total expected return over two years ({atteso:+.0%}), of "
+                        f"which {segnale.income_component:+.0%} collected as dividends.",
+                        f"Rendimento complessivo atteso a due anni interessante ({atteso:+.0%}), "
+                        f"di cui {segnale.income_component:+.0%} incassato in cedole."))
     elif atteso >= 0.08:
         punti += 0.5
-        motivi.append(f"Modest total expected return over two years ({atteso:+.0%}).")
+        motivi.append(L(f"Modest total expected return over two years ({atteso:+.0%}).",
+                        f"Rendimento complessivo atteso a due anni modesto ({atteso:+.0%})."))
     elif atteso >= -0.08:
-        motivi.append(f"Price in line with what the dividend justifies ({atteso:+.0%} over two "
-                      "years).")
+        motivi.append(L(f"Price in line with what the dividend justifies ({atteso:+.0%} over two "
+                        "years).",
+                        f"Prezzo in linea con il valore che il dividendo giustifica ({atteso:+.0%} "
+                        "a due anni)."))
     elif atteso >= -0.20:
         punti -= 1.5
-        motivi.append(f"The price already assumes more than the dividend justifies "
-                      f"({atteso:+.0%} over two years).")
+        motivi.append(L(f"The price already assumes more than the dividend justifies "
+                        f"({atteso:+.0%} over two years).",
+                        f"Il prezzo incorpora piu' di quanto il dividendo giustifichi "
+                        f"({atteso:+.0%} a due anni)."))
     else:
         punti -= 2.0
-        motivi.append(f"The price is well above what the dividend justifies ({atteso:+.0%} "
-                      "over two years).")
+        motivi.append(L(f"The price is well above what the dividend justifies ({atteso:+.0%} "
+                        "over two years).",
+                        f"Il prezzo e' molto sopra quello che il dividendo giustifica "
+                        f"({atteso:+.0%} a due anni)."))
 
     if safety.score >= 70:
         punti += 1.5
-        motivi.append(f"Solid dividend ({safety.score:.0f}/100): {safety.band}.")
+        motivi.append(L(f"Solid dividend ({safety.score:.0f}/100): {safety.band}.",
+                        f"Dividendo solido ({safety.score:.0f}/100): {safety.band}."))
     elif safety.score >= 55:
         punti += 0.75
-        motivi.append(f"Dividend broadly sustainable ({safety.score:.0f}/100).")
+        motivi.append(L(f"Dividend broadly sustainable ({safety.score:.0f}/100).",
+                        f"Dividendo nel complesso sostenibile ({safety.score:.0f}/100)."))
     elif safety.score >= 45:
-        motivi.append(f"Dividend sustainability uncertain ({safety.score:.0f}/100).")
+        motivi.append(L(f"Dividend sustainability uncertain ({safety.score:.0f}/100).",
+                        f"Sostenibilita' del dividendo incerta ({safety.score:.0f}/100)."))
     elif safety.score >= 35:
         punti -= 1.0
-        motivi.append(f"Fragile dividend ({safety.score:.0f}/100).")
+        motivi.append(L(f"Fragile dividend ({safety.score:.0f}/100).",
+                        f"Dividendo fragile ({safety.score:.0f}/100)."))
     else:
         punti -= 2.0
-        motivi.append(f"Dividend at risk ({safety.score:.0f}/100).")
+        motivi.append(L(f"Dividend at risk ({safety.score:.0f}/100).",
+                        f"Dividendo a rischio ({safety.score:.0f}/100)."))
 
     percentile = yield_stats.get("percentile")
     if percentile is not None:
         attuale = yield_stats.get("attuale")
         if percentile >= 0.75:
             punti += 1.0
-            motivi.append(f"Today's yield ({attuale:.1%}) is among the highest in its history: "
-                          f"more generous than {percentile:.0%} of all observations.")
+            motivi.append(L(f"Today's yield ({fmt.pct(attuale)}) is among the highest in its "
+                            f"history: "
+                            f"more generous than {percentile:.0%} of all observations.",
+                            f"Il rendimento di oggi ({fmt.pct(attuale)}) e' fra i piu' alti della "
+                            f"sua "
+                            f"storia: piu' generoso del {percentile:.0%} delle osservazioni."))
         elif percentile >= 0.55:
             punti += 0.5
-            motivi.append(f"Today's yield ({attuale:.1%}) is above its own median "
-                          f"({mediana:.1%}).")
+            motivi.append(L(f"Today's yield ({fmt.pct(attuale)}) is above its own median "
+                            f"({fmt.pct(mediana)}).",
+                            f"Il rendimento di oggi ({fmt.pct(attuale)}) e' sopra la propria "
+                            f"mediana "
+                            f"({fmt.pct(mediana)})."))
         elif percentile <= 0.15:
             punti -= 1.5
-            motivi.append(f"Today's yield ({attuale:.1%}) is among the lowest ever recorded: "
-                          "by its own history the stock is expensive.")
+            motivi.append(L(f"Today's yield ({fmt.pct(attuale)}) is among the lowest ever "
+                            f"recorded: "
+                            "by its own history the stock is expensive.",
+                            f"Il rendimento di oggi ({fmt.pct(attuale)}) e' fra i piu' bassi mai "
+                            "registrati: storicamente il titolo e' caro."))
         elif percentile <= 0.25:
             punti -= 1.0
-            motivi.append(f"Today's yield ({attuale:.1%}) is below its own median "
-                          f"({mediana:.1%}).")
+            motivi.append(L(f"Today's yield ({fmt.pct(attuale)}) is below its own median "
+                            f"({fmt.pct(mediana)}).",
+                            f"Il rendimento di oggi ({fmt.pct(attuale)}) e' sotto la propria "
+                            f"mediana "
+                            f"({fmt.pct(mediana)})."))
 
     crescita = growth.get("cagr_5y") or growth.get("cagr_3y")
     if crescita is not None:
         if crescita > 0.05:
             punti += 0.5
-            motivi.append(f"The dividend grows {crescita:.1%} a year: the yield on your "
-                          "purchase price improves over time.")
+            motivi.append(L(f"The dividend grows {fmt.pct(crescita)} a year: the yield on your "
+                            "purchase price improves over time.",
+                            f"Il dividendo cresce del {fmt.pct(crescita)} all'anno: il rendimento "
+                            f"sul "
+                            "prezzo di acquisto migliora con il tempo."))
         elif crescita < -0.02:
             punti -= 0.5
-            motivi.append(f"The dividend is shrinking {abs(crescita):.1%} a year.")
+            motivi.append(L(f"The dividend is shrinking {fmt.pct(abs(crescita))} a year.",
+                            f"Il dividendo si riduce del {fmt.pct(abs(crescita))} all'anno."))
 
-    if safety.cut_risk_band == "high":
+    if rischio_alto(safety):
         punti -= 2.0
-    elif safety.cut_risk_band == "medium":
+    elif rischio_medio(safety):
         punti -= 0.5
 
     punti = max(-6.0, min(6.0, punti))
     if punti >= 2.0:
-        azione = "BUY"
+        azione = BUY
     elif punti > -1.0:
-        azione = "HOLD"
+        azione = HOLD
     else:
-        azione = "SELL"
+        azione = SELL
 
     # Il rischio di taglio prevale: un rendimento alto perche' il mercato si
     # aspetta un taglio non e' un'occasione.
     if scenario_taglio:
-        motivi.insert(0, f"Cut risk is high, so the valuation uses the pessimistic-case "
-                         f"dividend ({dps_valutazione:.2f} instead of "
-                         f"{previsione.year1_base:.2f}) and a target yield raised to "
-                         f"{obiettivo:.1%} for the risk.")
-        if azione == "BUY":
-            azione = "HOLD"
-            motivi.insert(1, "A cheap price is not enough to recommend buying a dividend that "
-                             "may be cut.")
+        motivi.insert(0, L(f"Cut risk is high, so the valuation uses the pessimistic-case "
+                           f"dividend ({fmt.num(dps_valutazione)} instead of "
+                           f"{fmt.num(previsione.year1_base)}) and a target yield raised to "
+                           f"{fmt.pct(obiettivo)} for the risk.",
+                           f"Il rischio di taglio e' alto, quindi la valutazione usa il dividendo "
+                           f"dello scenario pessimistico ({fmt.num(dps_valutazione)} invece di "
+                           f"{fmt.num(previsione.year1_base)}) e un rendimento obiettivo alzato al "
+                           f"{fmt.pct(obiettivo)} per il rischio."))
+        if azione == L("BUY", "COMPRA"):
+            azione = HOLD
+            motivi.insert(1, L("A cheap price is not enough to recommend buying a dividend that "
+                               "may be cut.",
+                               "Un prezzo conveniente non basta a consigliare l'acquisto di un "
+                               "dividendo che potrebbe essere tagliato."))
         if atteso < 0.10:
-            azione = "SELL"
+            azione = SELL
     for innesco in safety.hard_triggers:
         motivi.append(innesco)
 
-    convinzione = "high" if abs(punti) >= 3.0 else "medium" if abs(punti) >= 1.5 else "low"
+    convinzione = L("high",
+                    "alta") if abs(punti) >= 3.0 else L("medium",
+                                                                "media") if abs(punti) >= 1.5 else L("low",
+                                                                                        "bassa")
     segnale.action = azione
     segnale.conviction = convinzione
     segnale.reasons = motivi
+    parola = action_label(azione)
     segnale.headline = {
-        "BUY": f"BUY for the dividend - {convinzione} conviction",
-        "HOLD": f"HOLD - {convinzione} conviction",
-        "SELL": f"SELL / REDUCE - {convinzione} conviction",
+        BUY: L(f"{parola} for the dividend - {convinzione} conviction",
+               f"{parola} per il dividendo - convinzione {convinzione}"),
+        HOLD: L(f"{parola} - {convinzione} conviction",
+                f"{parola} - convinzione {convinzione}"),
+        SELL: L(f"{parola} / REDUCE - {convinzione} conviction",
+                f"{parola} / RIDUCI - convinzione {convinzione}"),
     }[azione]
     return segnale
 
@@ -1104,8 +1264,11 @@ def analyze_dividends(metrics: Metrics, prices: Optional[pd.DataFrame],
     pagamenti = dividend_set.series if dividend_set and dividend_set.ok else None
     if pagamenti is None or pagamenti.empty:
         analisi.notes.append(
-            "No dividend recorded for this stock in the sources available. If it does pay "
-            "but the data is missing, you can supply it in a CSV file (see the Data sources tab)."
+            L("No dividend recorded for this stock in the sources available. If it does pay "
+              "but the data is missing, you can supply it in a CSV file (see the Data sources tab).",
+              "Nessun dividendo registrato per questo titolo nelle fonti disponibili. "
+              "Se distribuisce ma i dati mancano, puoi fornirli in un file CSV "
+              "(vedi la scheda Fonti dei dati).")
         )
         return analisi
 
@@ -1134,21 +1297,28 @@ def analyze_dividends(metrics: Metrics, prices: Optional[pd.DataFrame],
     completi = int(analisi.growth.get("anni_completi") or 0)
     if completi < 5:
         analisi.notes.append(
-            f"Only {completi} complete dividend years: this tool is built for a ten-year read, "
-            "and with this much history the averages are indicative only."
+            L(f"Only {completi} complete dividend years: this tool is built for a ten-year read, "
+              "and with this much history the averages are indicative only.",
+              f"Solo {completi} anni completi di dividendi: l'obiettivo dichiarato e' una lettura "
+              "a dieci anni, e con questa storia le medie sono indicative.")
         )
     conteggi = pagamenti.groupby(pagamenti.index.year).count()
     completi_conteggio = conteggi[conteggi.index < pd.Timestamp.now().year]
     if len(completi_conteggio) >= 4 and completi_conteggio.nunique() > 1:
         analisi.notes.append(
-            "The number of payments per year changed over the period: the historical yield "
-            f"series uses today's cadence ({analisi.cadence} payments a year) for the past too, "
-            "so the earliest years may be slightly distorted."
+            L("The number of payments per year changed over the period: the historical yield "
+              f"series uses today's cadence ({analisi.cadence} payments a year) for the past too, "
+              "so the earliest years may be slightly distorted.",
+              "Il numero di stacchi per anno e' cambiato nel periodo: la serie storica del "
+              f"rendimento usa la cadenza attuale ({analisi.cadence} stacchi l'anno) anche per "
+              "il passato, quindi i primi anni possono essere leggermente distorti.")
         )
     if analisi.yield_stats.get("base") == "media annuale":
         analisi.notes.append(
-            "The yield percentile is computed on annual averages (not enough daily prices): "
-            "it is coarser than usual."
+            L("The yield percentile is computed on annual averages (not enough daily prices): "
+              "it is coarser than usual.",
+              "Il percentile del rendimento e' calcolato sulle medie annuali (mancano prezzi "
+              "giornalieri sufficienti): e' piu' grossolano del normale.")
         )
     for avviso in (dividend_set.disagreements if dividend_set else []):
         analisi.notes.append(avviso)

@@ -13,6 +13,7 @@ import pandas as pd
 
 from setxray.sources.base import parse_dividend_records
 from setxray.sources.http import FetchError, get_json
+from setxray.lang import L
 
 URL = "https://eodhd.com/api/div/{symbol}"
 
@@ -20,7 +21,7 @@ URL = "https://eodhd.com/api/div/{symbol}"
 def dividends(symbol: str) -> Optional[pd.Series]:
     chiave = os.environ.get("EODHD_API_KEY")
     if not chiave:
-        raise FetchError("EODHD_API_KEY is missing")
+        raise FetchError(L("EODHD_API_KEY is missing", "manca EODHD_API_KEY"))
     from setxray.datasource import normalize_symbol
 
     _, yahoo_symbol = normalize_symbol(symbol)  # EODHD usa lo stesso suffisso .BK

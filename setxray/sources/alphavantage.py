@@ -13,6 +13,7 @@ import pandas as pd
 
 from setxray.sources.base import clean_series, parse_dividend_records
 from setxray.sources.http import FetchError, get_json
+from setxray.lang import L
 
 URL = "https://www.alphavantage.co/query"
 
@@ -20,7 +21,7 @@ URL = "https://www.alphavantage.co/query"
 def dividends(symbol: str) -> Optional[pd.Series]:
     chiave = os.environ.get("ALPHAVANTAGE_API_KEY")
     if not chiave:
-        raise FetchError("ALPHAVANTAGE_API_KEY is missing")
+        raise FetchError(L("ALPHAVANTAGE_API_KEY is missing", "manca ALPHAVANTAGE_API_KEY"))
     from setxray.datasource import normalize_symbol
 
     set_symbol, _ = normalize_symbol(symbol)
@@ -37,7 +38,7 @@ def dividends(symbol: str) -> Optional[pd.Series]:
                     "apikey": chiave})
     mensili = dati.get("Monthly Adjusted Time Series") if isinstance(dati, dict) else None
     if not isinstance(mensili, dict):
-        raise FetchError("no dividend in the response")
+        raise FetchError(L("no dividend in the response", "nessun dividendo nella risposta"))
     importi = {}
     for data, valori in mensili.items():
         grezzo = valori.get("7. dividend amount") if isinstance(valori, dict) else None

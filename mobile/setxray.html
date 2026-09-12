@@ -98,6 +98,23 @@
     color: var(--accent); margin: 0 0 6px;
   }
   .testata h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.015em; margin: 0; text-wrap: balance; }
+  /* L'interruttore della lingua sta in cima a destra, in linea con
+     l'occhiello: si trova subito e non ruba spazio al titolo. */
+  .cima { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .lingue { display: flex; gap: 2px; flex: 0 0 auto; }
+  .lingue button {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 4px 8px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+  }
+  .lingue button[aria-pressed="true"] {
+    background: var(--accent); border-color: var(--accent); color: var(--surface);
+  }
+  :root[data-theme="dark"] .lingue button[aria-pressed="true"] { color: var(--ground); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .lingue button[aria-pressed="true"] { color: var(--ground); }
+  }
   .testata p { margin: 6px 0 0; font-size: 14px; color: var(--ink-soft); }
 
   .nastro {
@@ -278,25 +295,30 @@
 
 <div class="guscio">
   <header class="testata">
-    <p class="occhiello">Stock Exchange of Thailand</p>
-    <h1>Ten years of dividends, and what to do about them</h1>
-    <p>A preview of the tool: six test companies, with the real output of the analysis engine.</p>
+    <div class="cima">
+      <p class="occhiello">Stock Exchange of Thailand</p>
+      <div class="lingue" id="lingue" role="group" aria-label="Language / Lingua">
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        <button type="button" data-lang="it" aria-pressed="false">IT</button>
+      </div>
+    </div>
+    <h1 id="titolo-pagina"></h1>
+    <p id="sottotitolo-pagina"></p>
   </header>
 
   <div class="nastro">
     <div class="chip-riga" id="selettore" role="group" aria-label="Choose the test company"></div>
   </div>
 
-  <p class="finto">
-    <span aria-hidden="true">⚗︎</span>
-    <span><strong>Invented companies, synthetic numbers.</strong> They are here to show how the
-    tool reasons in the typical cases. These are not real companies and must not be used to
-    decide anything. For real SET data, see the bottom of the page.</span>
-  </p>
+  <p class="finto" id="avviso-finto"></p>
 
   <main id="app"></main>
 
-  <footer class="piede">
+  <!-- Il piede e' testo lungo con dentro dei collegamenti: le due lingue
+       stanno scritte entrambe nel documento e si mostra quella scelta. Lo
+       stesso testo costruito da JavaScript sarebbe meno leggibile qui, e per
+       chi arriva con i motori di ricerca meno utile. -->
+  <footer class="piede" data-lang="en">
     <h3>Trying it on real stocks</h3>
     <p>
       The analysis runs in Python and fetches the data on the spot, so from a phone it has
@@ -317,12 +339,44 @@ pip install -r requirements.txt
 streamlit run app.py</code></pre>
     <p>
       On the first stock you analyse, check the <em>Data sources</em> tab: it says which
-      archive the payments came from and whether the other sources agree.
+      archive the payments came from and whether the other sources agree. The app itself
+      has the same language switch as this page.
     </p>
     <p class="disclaimer">
       Automated processing of public data. This is not financial advice, nor a personalised
       recommendation. Always check the figures against the company's official statements
       and the Stock Exchange of Thailand website.
+    </p>
+  </footer>
+
+  <footer class="piede" data-lang="it" hidden>
+    <h3>Provarlo sui titoli veri</h3>
+    <p>
+      L'analisi gira in Python e scarica i dati al momento, quindi dal telefono serve
+      metterla online una volta sola. È gratuito e si fa dal browser dell'iPhone in
+      un paio di minuti:
+    </p>
+    <p>
+      <a href="https://share.streamlit.io/deploy?repository=giancarlo1963%2Fstock-exchange&amp;branch=claude%2Fthailand-equity-analyzer-rfrfkp&amp;mainModule=app.py">
+        Apri il modulo di pubblicazione già compilato →</a><br>
+      Entra con GitHub, premi <em>Deploy</em>, aspetta due minuti. Ottieni un indirizzo
+      tuo che puoi aggiungere alla schermata Home.
+    </p>
+    <p>Oppure, da un computer:</p>
+    <pre><code>git clone -b claude/thailand-equity-analyzer-rfrfkp \
+  https://github.com/giancarlo1963/stock-exchange.git
+cd stock-exchange
+pip install -r requirements.txt
+streamlit run app.py</code></pre>
+    <p>
+      Il primo titolo che analizzi, controlla la scheda <em>Fonti dei dati</em>: dice da
+      quale archivio arrivano gli stacchi e se le altre fonti concordano. Anche l'app ha
+      lo stesso interruttore della lingua che c'e' in questa pagina.
+    </p>
+    <p class="disclaimer">
+      Elaborazione automatica di dati pubblici. Non è consulenza finanziaria né una
+      raccomandazione personalizzata. Verifica sempre i numeri sui bilanci ufficiali
+      della società e sul sito della Stock Exchange of Thailand.
     </p>
   </footer>
 </div>
@@ -331,18 +385,56 @@ streamlit run app.py</code></pre>
 <script>
 (function () {
   "use strict";
-  const D = window.DATI || {};
+  const TUTTI = window.DATI || {};
   const ORDINE = ["dividendo", "tagliato", "irregolare", "solida", "cara", "difficolta"];
-  const NOMI = { dividendo: "Solid coupon", tagliato: "Dividend cut",
-                 irregolare: "Irregular payer", solida: "Growing",
-                 cara: "Expensive", difficolta: "In trouble" };
 
-  // ---------- numeri all'inglese ----------
-  const nf = (d) => new Intl.NumberFormat("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
-  const num = (v, d = 2) => v == null ? "n/a" : nf(d).format(v);
-  const pct = (v, d = 1, segno = false) => v == null ? "n/a"
+  // ---------- la lingua ----------
+  // La scelta sta nell'indirizzo (?lang=it), cosi' un collegamento condiviso
+  // si apre nella lingua di chi lo ha mandato, e nel deposito locale, cosi'
+  // chi torna sulla pagina la ritrova come l'aveva lasciata. Il deposito puo'
+  // non esserci (finestra privata, dati del sito bloccati): allora si
+  // ripiega sulla lingua del telefono.
+  const LINGUE = ["en", "it"];
+  const dalDeposito = (chiave) => {
+    try { return localStorage.getItem(chiave); } catch (e) { return null; }
+  };
+  const nelDeposito = (chiave, valore) => {
+    try { localStorage.setItem(chiave, valore); } catch (e) { /* pazienza */ }
+  };
+  const normalizza = (codice) => {
+    const testo = String(codice || "").toLowerCase();
+    return testo.startsWith("it") ? "it" : testo.startsWith("en") ? "en" : null;
+  };
+  let LINGUA = normalizza(new URLSearchParams(location.search).get("lang"))
+    || normalizza(dalDeposito("setxray-lingua"))
+    || normalizza((navigator.languages || [navigator.language])[0])
+    || "en";
+
+  // Si chiama `dice` e non `L` perche' dentro i grafici `L` e' il margine
+  // sinistro: due significati per una lettera sola, e il primo che passa
+  // vince. Il nome piu' lungo costa niente e non si scontra con nulla.
+  const dice = (en, it) => (LINGUA === "it" ? it : en);
+  let D = TUTTI[LINGUA] || TUTTI.en || {};
+
+  const NOMI = () => ({
+    dividendo: dice("Solid coupon", "Cedola solida"),
+    tagliato: dice("Dividend cut", "Dividendo tagliato"),
+    irregolare: dice("Irregular payer", "Pagatore irregolare"),
+    solida: dice("Growing", "In crescita"),
+    cara: dice("Expensive", "Cara"),
+    difficolta: dice("In trouble", "In difficolta'"),
+  });
+
+  // ---------- numeri ----------
+  // In inglese la virgola separa le migliaia, in italiano i decimali: la
+  // lingua non cambia solo le parole, cambia ogni cifra.
+  const nf = (d) => new Intl.NumberFormat(dice("en-US", "it-IT"),
+    { minimumFractionDigits: d, maximumFractionDigits: d });
+  const NA = () => dice("n/a", "n/d");
+  const num = (v, d = 2) => v == null ? NA() : nf(d).format(v);
+  const pct = (v, d = 1, segno = false) => v == null ? NA()
     : (segno && v > 0 ? "+" : "") + nf(d).format(v * 100) + "%";
-  const bat = (v, d = 2) => v == null ? "n/a" : num(v, d) + " THB";
+  const bat = (v, d = 2) => v == null ? NA() : num(v, d) + " THB";
   const esc = (s) => String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -395,7 +487,8 @@ streamlit run app.py</code></pre>
       }
     });
     s += `<line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" stroke="currentColor" stroke-opacity="0.35"/>`;
-    return svg(W, H, s, "Dividend per share year by year, with the estimate for the next two years");
+    return svg(W, H, s, dice("Dividend per share year by year, with the estimate for the next two years",
+                    "Dividendo per azione anno per anno, con la stima dei prossimi due anni"));
   }
 
   function graficoRendimento(d) {
@@ -423,12 +516,13 @@ streamlit run app.py</code></pre>
     if (r.attuale != null) {
       const yy = y(r.attuale), col = r.attuale > (r.mediana || 0) ? "var(--good)" : "var(--bad)";
       s += `<circle cx="${(W - R).toFixed(1)}" cy="${yy.toFixed(1)}" r="4" fill="${col}"/>`;
-      s += `<text x="${W - 6}" y="${(yy - 8).toFixed(1)}" text-anchor="end" style="${CT};fill:${col};font-weight:600">today ${pct(r.attuale, 1)}</text>`;
+      s += `<text x="${W - 6}" y="${(yy - 8).toFixed(1)}" text-anchor="end" style="${CT};fill:${col};font-weight:600">${dice("today", "oggi")} ${pct(r.attuale, 1)}</text>`;
     }
     [0, Math.floor(serie.length / 2), serie.length - 1].forEach(i => {
       s += `<text x="${x(i).toFixed(1)}" y="${H - 7}" text-anchor="middle" style="${CT}">${serie[i][0].slice(0, 4)}</text>`;
     });
-    return svg(W, H, s, "Dividend yield over time against its historical median");
+    return svg(W, H, s, dice("Dividend yield over time against its historical median",
+                    "Rendimento da dividendo nel tempo con la mediana storica"));
   }
 
   function graficoTotale(d) {
@@ -454,12 +548,13 @@ streamlit run app.py</code></pre>
     linea(1, "var(--serie-b)", 1.5);
     linea(2, "var(--serie-a)", 2);
     const ult = serie[serie.length - 1];
-    if (ult[2] != null) s += `<text x="${W - R + 5}" y="${(y(ult[2]) + 3.5).toFixed(1)}" style="${CT};fill:var(--serie-a);font-weight:600">coupons</text>`;
-    if (ult[1] != null) s += `<text x="${W - R + 5}" y="${(y(ult[1]) + 3.5).toFixed(1)}" style="${CT};fill:var(--serie-b)">price</text>`;
+    if (ult[2] != null) s += `<text x="${W - R + 5}" y="${(y(ult[2]) + 3.5).toFixed(1)}" style="${CT};fill:var(--serie-a);font-weight:600">${dice("coupons", "cedole")}</text>`;
+    if (ult[1] != null) s += `<text x="${W - R + 5}" y="${(y(ult[1]) + 3.5).toFixed(1)}" style="${CT};fill:var(--serie-b)">${dice("price", "prezzo")}</text>`;
     [0, serie.length - 1].forEach(i => {
       s += `<text x="${x(i).toFixed(1)}" y="${H - 7}" text-anchor="${i ? "end" : "start"}" style="${CT}">${serie[i][0].slice(0, 4)}</text>`;
     });
-    return svg(W, H, s, "Return with dividends reinvested against the price alone");
+    return svg(W, H, s, dice("Return with dividends reinvested against the price alone",
+                    "Rendimento con dividendi reinvestiti contro il solo prezzo"));
   }
 
   function graficoFattori(d) {
@@ -483,8 +578,9 @@ streamlit run app.py</code></pre>
       s += `<rect x="${Math.min(x0, x1).toFixed(1)}" y="${(top + 19).toFixed(1)}" width="${Math.max(1.5, Math.abs(x1 - x0)).toFixed(1)}" height="${alt}" rx="2" fill="${col}"/>`;
       s += `<text x="${(x1 + (pos ? 7 : -7)).toFixed(1)}" y="${(top + 29).toFixed(1)}" text-anchor="${pos ? "start" : "end"}" style="${CT};font-weight:600;fill:${col}">${pos ? "+" : ""}${num(it.punti, 0)} pt</text>`;
     });
-    s += `<text x="${cx}" y="${(H - 4).toFixed(1)}" text-anchor="middle" style="${CT};opacity:0.75">against  |  in favour</text>`;
-    return svg(W, H, s, "The factors that make up the safety score");
+    s += `<text x="${cx}" y="${(H - 4).toFixed(1)}" text-anchor="middle" style="${CT};opacity:0.75">${dice("against  |  in favour", "contro  |  a favore")}</text>`;
+    return svg(W, H, s, dice("The factors that make up the safety score",
+                    "I fattori che compongono il punteggio di solidita'"));
   }
 
   function graficoVerifica(d) {
@@ -508,9 +604,10 @@ streamlit run app.py</code></pre>
       parole.forEach((riga, k) => {
         s += `<text x="${cx.toFixed(1)}" y="${(H - B + 18 + k * 13).toFixed(1)}" text-anchor="middle" style="font-family:Archivo,system-ui,sans-serif;font-size:11px;fill:currentColor">${esc(riga)}</text>`;
       });
-      s += `<text x="${cx.toFixed(1)}" y="${(H - B + 18 + parole.length * 13).toFixed(1)}" text-anchor="middle" style="${CT};fill:currentColor;opacity:0.7">${it.n} cases</text>`;
+      s += `<text x="${cx.toFixed(1)}" y="${(H - B + 18 + parole.length * 13).toFixed(1)}" text-anchor="middle" style="${CT};fill:currentColor;opacity:0.7">${it.n} ${dice("cases", "casi")}</text>`;
     });
-    return svg(W, H, s, "Average return of the following two years by yield band");
+    return svg(W, H, s, dice("Average return of the following two years by yield band",
+                    "Rendimento medio dei due anni successivi per fascia di rendimento"));
   }
 
   function svg(w, h, corpo, titolo) {
@@ -544,22 +641,30 @@ streamlit run app.py</code></pre>
       ${intestazione(d)}
       <div class="verdetto ${classe}">
         <p class="azione">${esc(g.titolo.split(" — ")[0])}</p>
-        <p class="sotto">No dividend on record · horizon 1-2 years<br>
-          General fundamental score <b>${num(g.punteggio, 0)}/100</b> ·
-          expected return <b>${pct(g.atteso, 1, true)}</b></p>
+        <p class="sotto">${dice("No dividend on record", "Nessun dividendo registrato")} ·
+          ${dice("horizon", "orizzonte")} 1-2 ${dice("years", "anni")}<br>
+          ${dice("General fundamental score", "Punteggio fondamentale generale")}
+          <b>${num(g.punteggio, 0)}/100</b> · ${dice("expected return", "rendimento atteso")}
+          <b>${pct(g.atteso, 1, true)}</b></p>
       </div>
       <section>
-        <h3>Why there is no dividend signal</h3>
-        <p>This company pays nothing to its shareholders, so the ten-year dividend analysis
-          has nothing to work on. The verdict above comes from the general fundamental
-          analysis: earnings, cash, equity and debt.</p>
+        <h3>${dice("Why there is no dividend signal", "Perche' non c'e' un segnale sul dividendo")}</h3>
+        <p>${dice(
+          `This company pays nothing to its shareholders, so the ten-year dividend analysis
+           has nothing to work on. The verdict above comes from the general fundamental
+           analysis: earnings, cash, equity and debt.`,
+          `Questa azienda non distribuisce niente ai soci, quindi l'analisi dei dividendi a
+           dieci anni non ha su cosa lavorare. Il giudizio qui sopra viene dall'analisi
+           fondamentale generale: utili, cassa, patrimonio e debito.`)}</p>
         ${(g.gravi.length || g.avvisi.length) ? `<div class="avvisi">
-          ${g.gravi.map(t => `<div class="avviso grave"><span class="tag">Serious</span><span>${esc(t)}</span></div>`).join("")}
-          ${g.avvisi.slice(0, 3).map(t => `<div class="avviso lieve"><span class="tag">Watch out</span><span>${esc(t)}</span></div>`).join("")}
+          ${g.gravi.map(t => `<div class="avviso grave"><span class="tag">${
+            dice("Serious", "Grave")}</span><span>${esc(t)}</span></div>`).join("")}
+          ${g.avvisi.slice(0, 3).map(t => `<div class="avviso lieve"><span class="tag">${
+            dice("Watch out", "Occhio")}</span><span>${esc(t)}</span></div>`).join("")}
         </div>` : ""}
       </section>
       ${d.racconto.length ? `<section class="racconto">
-        <h3>The written analysis</h3>
+        <h3>${dice("The written analysis", "Il racconto")}</h3>
         ${d.racconto.map(t => `<p>${esc(t)}</p>`).join("")}
       </section>` : ""}`;
   }
@@ -567,6 +672,7 @@ streamlit run app.py</code></pre>
   function disegna(chiave) {
     const d = D[chiave];
     if (!d) return;
+    corrente = chiave;
     const html = d.paga ? conDividendo(d) : senzaDividendo(d);
     document.getElementById("app").innerHTML = html;
     document.querySelectorAll("#selettore .chip").forEach(c =>
@@ -576,8 +682,9 @@ streamlit run app.py</code></pre>
   function conDividendo(d) {
     const s = d.segnale, sic = d.solidita, r = d.rendimento, p = d.previsione;
     const classe = s.azione === "BUY" ? "" : s.azione === "SELL" ? "vendi" : "mantieni";
-    const spiega = s.azione === "BUY" ? "Buy or accumulate"
-      : s.azione === "SELL" ? "Sell or reduce" : "Hold, without adding";
+    const spiega = s.azione === "BUY" ? dice("Buy or accumulate", "Comprare o accumulare")
+      : s.azione === "SELL" ? dice("Sell or reduce", "Vendere o ridurre")
+      : dice("Hold, without adding", "Tenere, senza aumentare");
 
     const anniCompleti = d.anni.filter(a => a.completo);
     const conCopertura = anniCompleti.filter(a => a.payout != null || a.copertura != null).slice(-6);
@@ -587,111 +694,215 @@ streamlit run app.py</code></pre>
 
       <div class="verdetto ${classe}">
         <p class="azione">${esc(s.titolo.split(" - ")[0])}</p>
-        <p class="sotto">${esc(spiega)} · ${esc(s.convinzione)} conviction · horizon 1-2 years<br>
-          Dividend safety <b>${num(sic.punteggio, 0)}/100</b> (${esc(sic.banda)}) ·
-          cut risk <b>${esc(sic.rischio)}</b></p>
+        <p class="sotto">${esc(spiega)} · ${dice(`${esc(s.convinzione)} conviction`,
+          `convinzione ${esc(s.convinzione)}`)} · ${dice("horizon", "orizzonte")} 1-2
+          ${dice("years", "anni")}<br>
+          ${dice("Dividend safety", "Solidita' del dividendo")} <b>${num(sic.punteggio, 0)}/100</b>
+          (${esc(sic.banda)}) · ${dice("cut risk", "rischio di taglio")}
+          <b>${esc(sic.rischio)}</b></p>
       </div>
 
       <div class="griglia">
-        <div class="cifra"><p class="et">Yield today</p>
+        <div class="cifra"><p class="et">${dice("Yield today", "Rendimento oggi")}</p>
           <p class="val">${pct(r.attuale)}</p>
-          <p class="nt">historical median ${pct(r.mediana)}${r.percentile != null
-            ? ` · more generous than ${pct(r.percentile, 0)} of its own history` : ""}</p></div>
-        <div class="cifra"><p class="et">Dividend per share</p>
+          <p class="nt">${dice("historical median", "mediana storica")} ${pct(r.mediana)}${
+            r.percentile != null
+            ? dice(` · more generous than ${pct(r.percentile, 0)} of its own history`,
+                ` · piu' generoso del ${pct(r.percentile, 0)} della sua storia`) : ""}</p></div>
+        <div class="cifra"><p class="et">${dice("Dividend per share", "Dividendo per azione")}</p>
           <p class="val">${bat(r.dpsIndicato)}</p>
-          <p class="nt">${p.y1 != null ? `next 12 months estimated at ${bat(p.y1)}` : "annualised"}</p></div>
-        <div class="cifra"><p class="et">Expected over 2 years</p>
+          <p class="nt">${p.y1 != null
+            ? dice(`next 12 months estimated at ${bat(p.y1)}`, `stima prossimi 12 mesi ${bat(p.y1)}`)
+            : dice("annualised", "su base annua")}</p></div>
+        <div class="cifra"><p class="et">${dice("Expected over 2 years", "Atteso a 2 anni")}</p>
           <p class="val ${s.atteso2a > 0.08 ? "su" : s.atteso2a < 0 ? "giu" : ""}">${pct(s.atteso2a, 1, true)}</p>
-          <p class="nt">${pct(s.cedole, 1, true)} from coupons, ${pct(s.prezzoComp, 1, true)} from the price</p></div>
-        <div class="cifra"><p class="et">${s.azione === "SELL" ? "Interesting below" : "Buy below"}</p>
+          <p class="nt">${dice(`${pct(s.cedole, 1, true)} from coupons, ${pct(s.prezzoComp, 1, true)} from the price`,
+                            `${pct(s.cedole, 1, true)} di cedole, ${pct(s.prezzoComp, 1, true)} di prezzo`)}</p></div>
+        <div class="cifra"><p class="et">${s.azione === "SELL"
+            ? dice("Interesting below", "Interessante sotto") : dice("Buy below", "Compra sotto")}</p>
           <p class="val">${bat(s.ingresso)}</p>
-          <p class="nt">value ${num(s.valore)} · trim above ${num(s.uscita)}</p></div>
+          <p class="nt">${dice("value", "valore")} ${num(s.valore)} ·
+            ${dice("trim above", "alleggerisci sopra")} ${num(s.uscita)}</p></div>
       </div>
 
       <section>
-        <h3>Why</h3>
+        <h3>${dice("Why", "Perche'")}</h3>
         <ul class="motivi">${s.motivi.map(m => `<li>${esc(m)}</li>`).join("")}</ul>
         ${(d.generale.gravi.length || d.generale.avvisi.length) ? `<div class="avvisi">
-          ${d.generale.gravi.map(t => `<div class="avviso grave"><span class="tag">Serious</span><span>${esc(t)}</span></div>`).join("")}
-          ${d.generale.avvisi.slice(0, 3).map(t => `<div class="avviso lieve"><span class="tag">Watch out</span><span>${esc(t)}</span></div>`).join("")}
+          ${d.generale.gravi.map(t => `<div class="avviso grave"><span class="tag">${
+            dice("Serious", "Grave")}</span><span>${esc(t)}</span></div>`).join("")}
+          ${d.generale.avvisi.slice(0, 3).map(t => `<div class="avviso lieve"><span class="tag">${
+            dice("Watch out", "Occhio")}</span><span>${esc(t)}</span></div>`).join("")}
         </div>` : ""}
         ${d.generale.azione !== s.azione ? `<div class="avvisi"><div class="avviso lieve">
-          <span class="tag">Disagree</span><span>On dividends the signal is <b>${esc(s.azione)}</b>,
-          on general fundamentals <b>${esc(d.generale.azione)}</b> (score ${num(d.generale.punteggio, 0)}/100).
-          They look at different things: the first weighs how sustainable the coupon is, the
-          second earnings and equity.</span></div></div>` : ""}
+          <span class="tag">${dice("Disagree", "Divergono")}</span><span>${dice(
+          `On dividends the signal is <b>${esc(s.azione)}</b>, on general fundamentals
+           <b>${esc(d.generale.azione)}</b> (score ${num(d.generale.punteggio, 0)}/100).
+           They look at different things: the first weighs how sustainable the coupon is,
+           the second earnings and equity.`,
+          `Sui dividendi il segnale e' <b>${esc(s.azione)}</b>, sui fondamentali generali
+           <b>${esc(d.generale.azione)}</b> (punteggio ${num(d.generale.punteggio, 0)}/100).
+           Guardano cose diverse: il primo pesa la sostenibilita' della cedola, il secondo
+           utili e patrimonio.`)}</span></div></div>` : ""}
       </section>
 
       <section>
-        <h3>Ten years of coupons</h3>
-        <p class="occhio-nota">It pays ${d.anni[d.anni.length - 2] && d.anni[d.anni.length - 2].stacchi === 2
-          ? "twice a year, with the final payment in April and the interim one in September"
-          : "once a year"} ·
-          ${d.storico.anni_pagati} years paid out of ${d.storico.anni_osservati} ·
-          ${d.storico.tagli ? `${d.storico.tagli} cut in ${d.storico.anno_ultimo_taglio}` : "no cuts"}</p>
-        ${figura("Dividend per share", graficoDividendi(d),
-          `Red: years with a cut or with no dividend. Grey: the year in progress, incomplete.
-           The hollow bars are the estimate for the next two years, with its range.`,
-          pallino("var(--serie-a)", "paid") + pallino("var(--bad)", "cut") +
-          pallino("var(--ink-faint)", "year in progress") + pallino("var(--accent)", "forecast"))}
-        ${figura("Is today's price generous?", graficoRendimento(d),
-          `The annualised dividend divided by that day's price, compared with its
-           <em>own</em> history, not with a market average. The light band is the central
-           half of the values.`)}
-        ${figura("Where the return came from", graficoTotale(d),
+        <h3>${dice("Ten years of coupons", "Dieci anni di cedole")}</h3>
+        <p class="occhio-nota">${
+          d.anni[d.anni.length - 2] && d.anni[d.anni.length - 2].stacchi === 2
+          ? dice("It pays twice a year, with the final payment in April and the interim one in September",
+              "Paga due volte l'anno, con lo stacco finale in aprile e l'interinale a settembre")
+          : dice("It pays once a year", "Paga una volta l'anno")} ·
+          ${dice(`${d.storico.anni_pagati} years paid out of ${d.storico.anni_osservati}`,
+              `${d.storico.anni_pagati} anni pagati su ${d.storico.anni_osservati}`)} ·
+          ${d.storico.tagli
+            ? dice(`${d.storico.tagli} cut in ${d.storico.anno_ultimo_taglio}`,
+                `${d.storico.tagli} taglio nel ${d.storico.anno_ultimo_taglio}`)
+            : dice("no cuts", "nessun taglio")}</p>
+        ${figura(dice("Dividend per share", "Dividendo per azione"), graficoDividendi(d),
+          dice(`Red: years with a cut or with no dividend. Grey: the year in progress, incomplete.
+             The hollow bars are the estimate for the next two years, with its range.`,
+            `Rosso: anni di taglio o senza dividendo. Grigio: l'anno in corso, incompleto.
+             Le colonne vuote sono la stima dei prossimi due anni, con la sua forchetta.`),
+          pallino("var(--serie-a)", dice("paid", "pagato")) + pallino("var(--bad)", dice("cut", "taglio")) +
+          pallino("var(--ink-faint)", dice("year in progress", "anno in corso")) +
+          pallino("var(--accent)", dice("forecast", "previsione")))}
+        ${figura(dice("Is today's price generous?", "Il prezzo di oggi e' generoso?"), graficoRendimento(d),
+          dice(`The annualised dividend divided by that day's price, compared with its
+             <em>own</em> history, not with a market average. The light band is the central
+             half of the values.`,
+            `Rendimento su base annua diviso il prezzo del giorno, confrontato con la
+             <em>propria</em> storia, non con una media di mercato. La fascia chiara e' la
+             meta' centrale dei valori.`))}
+        ${figura(dice("Where the return came from", "Da dove e' venuto il rendimento"), graficoTotale(d),
           d.totale.totale_reinvestito != null
-            ? `Over ${num(d.totale.anni, 0)} years the price did ${pct(d.totale.solo_prezzo, 1, true)},
-               and with the coupons reinvested ${pct(d.totale.totale_reinvestito, 1, true)}
-               (${pct(d.totale.annualizzato, 1, true)} a year).`
-            : "Both lines start at 100.")}
+            ? dice(`Over ${num(d.totale.anni, 0)} years the price did ${pct(d.totale.solo_prezzo, 1, true)},
+                 and with the coupons reinvested ${pct(d.totale.totale_reinvestito, 1, true)}
+                 (${pct(d.totale.annualizzato, 1, true)} a year).`,
+                `In ${num(d.totale.anni, 0)} anni il prezzo ha fatto ${pct(d.totale.solo_prezzo, 1, true)},
+                 con le cedole reinvestite ${pct(d.totale.totale_reinvestito, 1, true)}
+                 (${pct(d.totale.annualizzato, 1, true)} all'anno).`)
+            : dice("Both lines start at 100.", "Entrambe le linee partono da 100."))}
       </section>
 
       <section>
-        <h3>Will the dividend hold?</h3>
-        <p class="occhio-nota">It starts at 50 points. Each factor adds or removes points
-          according to a stated rule: you can see where the number comes from and disagree on
-          any one of them. It is not a statistical model trained on past cuts.</p>
-        ${figura(`Score ${num(sic.punteggio, 0)}/100 — ${sic.banda}`, graficoFattori(d),
+        <h3>${dice("Will the dividend hold?", "Il dividendo regge?")}</h3>
+        <p class="occhio-nota">${dice(
+          `It starts at 50 points. Each factor adds or removes points according to a stated
+           rule: you can see where the number comes from and disagree on any one of them. It
+           is not a statistical model trained on past cuts.`,
+          `Si parte da 50 punti. Ogni fattore aggiunge o toglie secondo una regola
+           dichiarata: puoi vedere da dove viene il numero e non essere d'accordo su uno di
+           essi. Non e' un modello statistico addestrato sui tagli passati.`)}</p>
+        ${figura(dice(`Score ${num(sic.punteggio, 0)}/100 — ${sic.banda}`,
+                   `Punteggio ${num(sic.punteggio, 0)}/100 — ${sic.banda}`), graficoFattori(d),
           sic.fattori.filter(f => f.punti < 0).slice(0, 2)
             .map(f => `<b>${esc(f.etichetta)}</b>: ${esc(f.spiegazione)}.`).join(" ") ||
-          "No factor weighs against it.")}
+          dice("No factor weighs against it.", "Nessun fattore pesa in negativo."))}
         ${conCopertura.length ? `<div class="scorri"><table>
-          <thead><tr><th>Year</th><th>Dividend</th><th>Of earnings</th><th>Cash cover</th></tr></thead>
+          <thead><tr><th>${dice("Year", "Anno")}</th><th>${dice("Dividend", "Dividendo")}</th>
+          <th>${dice("Of earnings", "Su utili")}</th><th>${dice("Cash cover", "Copertura cassa")}</th></tr></thead>
           <tbody>${conCopertura.map(a => `<tr>
             <td class="num">${a.anno}</td>
             <td class="num">${num(a.dps)}</td>
             <td class="num ${a.payout != null && a.payout > 1 ? "rosso" : ""}">${a.payout != null ? pct(a.payout, 0) : "n/a"}</td>
             <td class="num ${a.copertura != null && a.copertura < 1 ? "rosso" : ""}">${a.copertura != null ? num(a.copertura, 2) + "x" : "n/a"}</td>
           </tr>`).join("")}</tbody></table></div>
-          <figcaption style="margin-top:8px">In red, the years when the dividend exceeded
-            earnings, or free cash flow was not enough to cover it.</figcaption>` : ""}
+          <figcaption style="margin-top:8px">${dice(
+            `In red, the years when the dividend exceeded earnings, or free cash flow was not
+             enough to cover it.`,
+            `In rosso gli anni in cui il dividendo ha superato gli utili, o la cassa libera
+             non e' bastata a coprirlo.`)}</figcaption>` : ""}
       </section>
 
       ${graficoVerifica(d) ? `<section>
-        <h3>Has it worked, on this stock?</h3>
-        <p class="occhio-nota">For every month-end of the last ten years: which band the yield
-          sat in against the previous three years, and what the following two years returned.</p>
-        ${figura("Return of the following two years", graficoVerifica(d), esc(d.verifica.nota))}
+        <h3>${dice("Has it worked, on this stock?", "Ha funzionato, su questo titolo?")}</h3>
+        <p class="occhio-nota">${dice(
+          `For every month-end of the last ten years: which band the yield sat in against the
+           previous three years, and what the following two years returned.`,
+          `Per ogni fine mese degli ultimi dieci anni: in che fascia stava il rendimento
+           rispetto ai tre anni precedenti, e quanto hanno reso i due anni successivi.`)}</p>
+        ${figura(dice("Return of the following two years", "Rendimento dei due anni successivi"),
+                 graficoVerifica(d), esc(d.verifica.nota))}
       </section>` : ""}
 
       <section class="racconto">
-        <h3>The written analysis</h3>
+        <h3>${dice("The written analysis", "Il racconto")}</h3>
         ${d.racconto.slice(0, 5).map(t => `<p>${esc(t)}</p>`).join("")}
-        ${d.racconto.length > 5 ? `<details><summary>Read the whole analysis (${d.racconto.length} passages)</summary>
+        ${d.racconto.length > 5 ? `<details><summary>${dice(
+          `Read the whole analysis (${d.racconto.length} passages)`,
+          `Leggi tutta l'analisi (${d.racconto.length} passaggi)`)}</summary>
           ${d.racconto.slice(5).map(t => `<p>${esc(t)}</p>`).join("")}</details>` : ""}
       </section>`;
     return html;
   }
 
+  // ---------- la testata, che cambia con la lingua ----------
+  function testata() {
+    document.documentElement.lang = LINGUA;
+    document.title = dice("SET X-Ray Dividends", "SET X-Ray Dividendi");
+    document.getElementById("titolo-pagina").textContent =
+      dice("Ten years of dividends, and what to do about them",
+        "Dividendi a dieci anni, e cosa farne");
+    document.getElementById("sottotitolo-pagina").textContent =
+      dice("A preview of the tool: six test companies, with the real output of the analysis engine.",
+        "Anteprima dello strumento: sei aziende di prova, con i risultati veri del motore di analisi.");
+    document.getElementById("avviso-finto").innerHTML =
+      `<span aria-hidden="true">⚗︎</span><span>` + dice(
+        "<strong>Invented companies, synthetic numbers.</strong> They are here to show how the "
+        + "tool reasons in the typical cases. These are not real companies and must not be used "
+        + "to decide anything. For real SET data, see the bottom of the page.",
+        "<strong>Aziende inventate, numeri sintetici.</strong> Servono a mostrare come ragiona "
+        + "lo strumento nei casi tipici. Non sono societa' reali e non vanno usati per decidere. "
+        + "Per i dati veri della SET, vedi in fondo alla pagina.") + `</span>`;
+    document.getElementById("selettore").setAttribute(
+      "aria-label", dice("Choose the test company", "Scegli l'azienda di prova"));
+    document.querySelectorAll("footer[data-lang]").forEach(f => {
+      f.hidden = f.dataset.lang !== LINGUA;
+    });
+    document.querySelectorAll("#lingue button").forEach(b => {
+      b.setAttribute("aria-pressed", String(b.dataset.lang === LINGUA));
+    });
+  }
+
   const sel = document.getElementById("selettore");
-  sel.innerHTML = ORDINE.filter(k => D[k]).map(k =>
-    `<button class="chip" type="button" data-k="${k}" aria-pressed="false">${esc(NOMI[k] || k)}</button>`
-  ).join("");
+
+  function chip() {
+    const nomi = NOMI();
+    sel.innerHTML = ORDINE.filter(k => D[k]).map(k =>
+      `<button class="chip" type="button" data-k="${k}" aria-pressed="false">${esc(nomi[k] || k)}</button>`
+    ).join("");
+  }
+
   sel.addEventListener("click", (e) => {
     const b = e.target.closest(".chip");
     if (b) { disegna(b.dataset.k); window.scrollTo({ top: 0, behavior: "smooth" }); }
   });
 
-  disegna(ORDINE.find(k => D[k]) || Object.keys(D)[0]);
+  let corrente = ORDINE.find(k => D[k]) || Object.keys(D)[0];
+
+  function cambiaLingua(codice) {
+    if (!LINGUE.includes(codice) || codice === LINGUA) return;
+    LINGUA = codice;
+    D = TUTTI[LINGUA] || D;
+    nelDeposito("setxray-lingua", LINGUA);
+    // L'indirizzo segue la scelta, cosi' il collegamento che si condivide si
+    // apre nella lingua che si stava leggendo. Senza ricaricare la pagina.
+    const url = new URL(location.href);
+    url.searchParams.set("lang", LINGUA);
+    history.replaceState(null, "", url);
+    testata();
+    chip();
+    disegna(corrente);
+  }
+
+  document.getElementById("lingue").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-lang]");
+    if (b) cambiaLingua(b.dataset.lang);
+  });
+
+  testata();
+  chip();
+  disegna(corrente);
 })();
 </script>

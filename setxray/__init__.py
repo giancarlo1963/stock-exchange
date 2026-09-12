@@ -5,8 +5,9 @@ segnali intraday. Prende un simbolo (es. PTT), raccoglie da piu' archivi tutti
 i dati pubblici disponibili e conclude con una singola indicazione operativa:
 BUY / HOLD / SELL.
 
-Tutto quello che l'utente legge e' in inglese; i nomi interni e i commenti
-restano in italiano, la lingua in cui lo strumento e' stato scritto.
+L'interfaccia parla inglese o italiano, con un interruttore: la scelta cambia
+ogni parola e ogni cifra (1,234.50 contro 1.234,50). I nomi interni e i
+commenti restano in italiano, la lingua in cui lo strumento e' stato scritto.
 
 Il centro dello strumento e' la **storia dei dividendi degli ultimi dieci
 anni**: quanto ha pagato, con quanta continuita', quanto del rendimento totale
@@ -15,7 +16,7 @@ due anni. Intorno a questo c'e' l'analisi fondamentale generale, che serve a
 capire se la cedola e' sostenuta dai conti.
 """
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 __all__ = ["analyze", "Analysis"]
 
 

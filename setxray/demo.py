@@ -12,27 +12,48 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from setxray.lang import L
+
 from setxray.datasource import StockData
 
-PROFILES: dict[str, str] = {
-    "solida": "Growing company, healthy accounts, reasonable valuation",
-    "cara": "Quality company priced far above its own historical average",
-    "difficolta": "Falling revenue, high debt, negative cash flow",
-    "dividendo": "Stable utility with a generous dividend, rising for 10 years",
-    "tagliato": "Cut its dividend in 2020 and now pays out almost all its earnings",
-    "irregolare": "Pays only in good years: no continuity",
-}
+# Le chiavi dei profili sono identificatori (`demo:solida` in un simbolo, e nei
+# test): restano come sono. Nome e descrizione invece sono testo che l'utente
+# legge, quindi sono funzioni e non tabelle - una tabella di modulo si
+# riempirebbe all'import, quando la lingua non e' ancora scelta.
+PROFILE_KEYS: tuple[str, ...] = ("solida", "cara", "difficolta",
+                                 "dividendo", "tagliato", "irregolare")
 
-# The profile keys are identifiers (`demo:solida` in a symbol, and in the tests)
-# so they stay as they are; these are the names the interface shows.
-PROFILE_NAMES: dict[str, str] = {
-    "solida": "solid",
-    "cara": "expensive",
-    "difficolta": "in trouble",
-    "dividendo": "dividend payer",
-    "tagliato": "dividend cut",
-    "irregolare": "irregular payer",
-}
+
+def profiles() -> dict[str, str]:
+    """Chiave -> descrizione di una riga, quella che si legge nel suggerimento."""
+    return {
+        "solida": L("Growing company, healthy accounts, reasonable valuation",
+                    "Azienda in crescita, conti sani, valutazione ragionevole"),
+        "cara": L("Quality company priced far above its own historical average",
+                  "Azienda di qualita' ma pagata molto piu' della sua media storica"),
+        "difficolta": L("Falling revenue, high debt, negative cash flow",
+                        "Ricavi in calo, debito alto, cassa negativa"),
+        "dividendo": L("Stable utility with a generous dividend, rising for 10 years",
+                       "Utility stabile con dividendo generoso e crescente da 10 anni"),
+        "tagliato": L("Cut its dividend in 2020 and now pays out almost all its earnings",
+                      "Ha tagliato il dividendo nel 2020 e oggi distribuisce quasi tutto l'utile"),
+        "irregolare": L("Pays only in good years: no continuity",
+                        "Paga solo negli anni buoni: nessuna continuita'"),
+    }
+
+
+def profile_names() -> dict[str, str]:
+    """Chiave -> nome breve, quello che sta su un pulsante."""
+    return {
+        "solida": L("solid", "solida"),
+        "cara": L("expensive", "cara"),
+        "difficolta": L("in trouble", "in difficolta'"),
+        "dividendo": L("dividend payer", "da dividendo"),
+        "tagliato": L("dividend cut", "dividendo tagliato"),
+        "irregolare": L("irregular payer", "pagatore irregolare"),
+    }
+
+
 
 
 def _annual_dates(n: int = 4, last_year: int = 2025) -> pd.DatetimeIndex:
@@ -208,8 +229,10 @@ def _dividend_payments(p: dict, dps_ultimo: float) -> Optional[pd.Series]:
 
 def build_demo(profile: str = "solida") -> StockData:
     """Costruisce uno `StockData` completo e coerente con dati inventati."""
-    if profile not in PROFILES:
-        raise ValueError(f"Unknown demo profile: {profile!r}. Choose from {sorted(PROFILES)}")
+    if profile not in PROFILE_KEYS:
+        raise ValueError(L(f"Unknown demo profile: {profile!r}. Choose from {sorted(PROFILE_KEYS)}",
+                           f"Profilo demo sconosciuto: {profile!r}. Scegli fra "
+                           f"{sorted(PROFILE_KEYS)}"))
     p = _params(profile)
     annual = _annual_dates()
     quarters = _quarter_dates()
@@ -420,7 +443,9 @@ def build_demo(profile: str = "solida") -> StockData:
         is_demo=True,
     )
     data.warnings.append(
-        "DEMONSTRATION MODE: invented company, synthetic numbers. Do not use for investment "
-        "decisions."
+        L("DEMONSTRATION MODE: invented company, synthetic numbers. Do not use for investment "
+          "decisions.",
+          "MODALITA' DIMOSTRATIVA: societa' inventata, numeri sintetici. "
+          "Non usare per decisioni di investimento.")
     )
     return data

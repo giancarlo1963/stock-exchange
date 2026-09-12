@@ -12,6 +12,7 @@ import pandas as pd
 
 from setxray.sources.base import parse_dividend_records
 from setxray.sources.http import FetchError, get_json
+from setxray.lang import L
 
 URL = "https://financialmodelingprep.com/api/v3/historical-price-full/stock_dividend/{symbol}"
 
@@ -19,7 +20,7 @@ URL = "https://financialmodelingprep.com/api/v3/historical-price-full/stock_divi
 def dividends(symbol: str) -> Optional[pd.Series]:
     chiave = os.environ.get("FMP_API_KEY")
     if not chiave:
-        raise FetchError("FMP_API_KEY is missing")
+        raise FetchError(L("FMP_API_KEY is missing", "manca FMP_API_KEY"))
     from setxray.datasource import normalize_symbol
 
     _, yahoo_symbol = normalize_symbol(symbol)

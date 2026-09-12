@@ -7,12 +7,12 @@ import pytest
 
 from setxray import charts
 from setxray.datasource import StockData
-from setxray.demo import PROFILES, build_demo
+from setxray.demo import PROFILE_KEYS, build_demo
 from setxray.engine import NoDataError, analyze, analyze_data
 from setxray.narrative import build_report
 
 
-@pytest.fixture(params=list(PROFILES))
+@pytest.fixture(params=list(PROFILE_KEYS))
 def analisi(request):
     return analyze_data(build_demo(request.param))
 

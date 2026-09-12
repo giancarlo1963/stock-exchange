@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from setxray.demo import PROFILES, build_demo
+from setxray.demo import PROFILE_KEYS, build_demo
 from setxray.dividends import (
     MARGINE_SICUREZZA,
     RENDIMENTO_MAX,
@@ -27,7 +27,7 @@ from setxray.sources import collect_dividends
 @pytest.fixture(scope="module")
 def analisi():
     """Un'analisi per profilo, calcolata una volta sola."""
-    return {profilo: analyze(f"demo:{profilo}") for profilo in PROFILES}
+    return {profilo: analyze(f"demo:{profilo}") for profilo in PROFILE_KEYS}
 
 
 # --------------------------------------------------------------------------
@@ -357,7 +357,7 @@ class TestIntegrazione:
     def test_il_racconto_esiste_e_non_ha_buchi(self, analisi):
         import re
 
-        for profilo in PROFILES:
+        for profilo in PROFILE_KEYS:
             paragrafi = analisi[profilo].narrative["dividends"]
             assert paragrafi
             testo = " ".join(paragrafi)

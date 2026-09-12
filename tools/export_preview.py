@@ -19,18 +19,15 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from setxray.demo import PROFILE_KEYS, profiles  # noqa: E402
 from setxray.engine import analyze  # noqa: E402
+from setxray.lang import CODES, using  # noqa: E402
 
-# Ordine e descrizioni sono scelte dell'anteprima, non del motore: la pagina
-# mostra prima i casi che insegnano di piu'.
-PROFILI = {
-    "dividendo": "A generous coupon, growing for ten years",
-    "tagliato": "Cut its dividend in 2020 and has not recovered",
-    "irregolare": "Pays only in the good years",
-    "solida": "A growing company, healthy accounts",
-    "cara": "A good company at a demanding price",
-    "difficolta": "Losses, debt and no dividend",
-}
+# L'ordine e' una scelta dell'anteprima, non del motore: la pagina mostra
+# prima i casi che insegnano di piu'. Le descrizioni arrivano da demo.py, che
+# le tiene nelle due lingue.
+ORDINE = ("dividendo", "tagliato", "irregolare", "solida", "cara", "difficolta")
+assert set(ORDINE) == set(PROFILE_KEYS), "l'anteprima deve coprire tutti i profili"
 # Una serie giornaliera intera pesa troppo per una pagina: un punto ogni due
 # settimane e' piu' di quanto uno schermo da telefono possa distinguere.
 PASSO_SERIE = 10
@@ -183,12 +180,18 @@ def export(profilo: str, descrizione: str) -> dict:
 
 def main(argv: list[str]) -> int:
     destinazione = argv[1] if len(argv) > 1 else "mobile/dati.js"
-    dati = {profilo: export(profilo, descrizione)
-            for profilo, descrizione in PROFILI.items()}
+    # L'interruttore della pagina non puo' far girare il motore: le due lingue
+    # vanno calcolate qui, entrambe, e spedite insieme.
+    dati = {}
+    for lingua in CODES:
+        with using(lingua):
+            descrizioni = profiles()
+            dati[lingua] = {profilo: export(profilo, descrizioni[profilo])
+                            for profilo in ORDINE}
     corpo = json.dumps(dati, ensure_ascii=False, separators=(",", ":"))
     with open(destinazione, "w", encoding="utf-8") as file:
         file.write(f"window.DATI = {corpo};\n")
-    print(f"{destinazione}: {len(dati)} profiles, "
+    print(f"{destinazione}: {len(ORDINE)} profili x {len(CODES)} lingue, "
           f"{len(corpo) / 1024:.0f} kB")
     return 0
 

@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from setxray.metrics import Metrics, safe_div
+from setxray import fmt
+from setxray.lang import L
 
 # --- parametri di mercato (Thailandia) ------------------------------------
 # Rendimento del titolo di stato thailandese a 10 anni e premio per il rischio
@@ -89,7 +91,8 @@ class Valuation:
     analyst_target: Optional[float] = None
     analyst_upside: Optional[float] = None
     dispersion: Optional[float] = None
-    reliability: str = "medium"  # "high" / "medium" / "low"
+    reliability: str = "medium"      # la parola che l'utente legge, tradotta
+    reliability_key: str = "medium"   # "high" / "medium" / "low", per il codice
     notes: list[str] = field(default_factory=list)
 
     @property
@@ -169,22 +172,27 @@ def _method_multiple(metrics: Metrics, scenario: Scenario, rate: float) -> Metho
     """Reversione al multiplo storico del titolo applicata all'utile atteso."""
     eps = metrics.estimates.get("eps_forward") or metrics.ttm.get("eps")
     if eps is None or eps <= 0:
-        return MethodResult("multiple", "Historical multiple (P/E)", None,
-                            skipped_reason="earnings per share not positive")
+        return MethodResult("multiple", L("Historical multiple (P/E)",
+                                          "Multiplo storico (P/E)"), None,
+                            skipped_reason=L("earnings per share not positive",
+                                             "utile per azione non positivo"))
     hist = metrics.multiple_history.get("pe") or {}
     target = hist.get(scenario.multiple_key) or hist.get("median")
-    source = f"{hist.get('years', 0):.0f}-year median" if target else "SET market average"
+    source = L(f"{hist.get('years', 0):.0f}-year median",
+               f"mediana {hist.get('years', 0):.0f} anni") if target else L("SET market average",
+                                                                        "media di mercato SET")
     if target is None:
         target = DEFAULT_SET_PE * (0.85 if scenario is BEAR else 1.15 if scenario is BULL else 1.0)
     growth = _growth_estimate(metrics)
     ceiling = _justified_pe(rate, growth, metrics.health.get("payout"))
     if ceiling is not None and target > ceiling * 1.3:
         target = ceiling * 1.3
-        source += ", capped by the justified P/E"
+        source += L(", capped by the justified P/E", ", limitato dal P/E giustificato")
     target = min(max(target, 5.0), 30.0)
     return MethodResult(
-        "multiple", "Historical multiple (P/E)", eps * target,
-        detail=f"expected earnings {eps:.2f} x P/E {target:.1f} ({source})",
+        "multiple", L("Historical multiple (P/E)", "Multiplo storico (P/E)"), eps * target,
+        detail=L(f"expected earnings {fmt.num(eps)} x P/E {fmt.num(target, 1)} ({source})",
+                 f"utile atteso {fmt.num(eps)} x P/E {fmt.num(target, 1)} ({source})"),
     )
 
 
@@ -195,21 +203,26 @@ def _method_ddm(metrics: Metrics, scenario: Scenario, rate: float) -> MethodResu
     costruzione chi reinveste: lo applichiamo solo quando il dividendo e' una
     parte rilevante del ritorno, non a tutti i titoli.
     """
-    label = "Discounted dividends (Gordon)"
+    label = L("Discounted dividends (Gordon)", "Dividendi scontati (Gordon)")
     dps = metrics.dividend.get("dps_ttm")
     if not dps or dps <= 0:
-        return MethodResult("ddm", label, None, skipped_reason="no dividend")
+        return MethodResult("ddm", label, None, skipped_reason=L("no dividend",
+                                                                 "nessun dividendo"))
     payout = metrics.health.get("payout")
     yield_now = metrics.dividend.get("yield_current") or 0.0
     if payout is not None and payout > 1.5:
         return MethodResult("ddm", label, None,
-                            skipped_reason="dividend above earnings, not sustainable")
+                            skipped_reason=L("dividend above earnings, not sustainable",
+                                             "dividendo superiore agli utili, non sostenibile"))
     # Il tetto alla crescita perpetua rende Gordon strutturalmente pessimista su
     # chi reinveste: usiamolo solo quando il dividendo e' davvero la fonte
     # principale del rendimento.
     if yield_now < 0.035 and not (payout is not None and payout >= 0.55):
         return MethodResult("ddm", label, None,
-                            skipped_reason="dividend not the dominant part of the return: model not suited")
+                            skipped_reason=L("dividend not the dominant part of the return: model "
+                                             "not suited",
+                                             "dividendo non dominante nel rendimento: modello non "
+                                             "adatto"))
     candidates = [sustainable_growth(metrics), metrics.growth.get("dps_cagr"),
                   metrics.growth.get("revenue_cagr")]
     values = sorted(c for c in candidates if c is not None)
@@ -220,7 +233,10 @@ def _method_ddm(metrics: Metrics, scenario: Scenario, rate: float) -> MethodResu
     # valutazione: vuol dire che tasso e crescita sono troppo vicini.
     fair = min(dps * (1 + g) / (r - g), dps * 28)
     return MethodResult("ddm", label, fair,
-                        detail=f"dividend {dps:.2f}, growth {g:.1%}, discount rate {r:.1%}")
+                        detail=L(f"dividend {fmt.num(dps)}, growth {fmt.pct(g)}, discount rate "
+                                 f"{fmt.pct(r)}",
+                                 f"dividendo {fmt.num(dps)}, crescita {fmt.pct(g)}, tasso "
+                                 f"{fmt.pct(r)}"))
 
 
 def _method_dcf(metrics: Metrics, scenario: Scenario, rate: float) -> MethodResult:
@@ -228,11 +244,13 @@ def _method_dcf(metrics: Metrics, scenario: Scenario, rate: float) -> MethodResu
     fcf = metrics.ttm.get("fcf")
     shares = metrics.shares
     if fcf is None or shares is None or shares <= 0:
-        return MethodResult("dcf", "Discounted cash flow", None,
-                            skipped_reason="cash flow not available")
+        return MethodResult("dcf", L("Discounted cash flow", "Flussi di cassa scontati"), None,
+                            skipped_reason=L("cash flow not available",
+                                             "flusso di cassa non disponibile"))
     if fcf <= 0:
-        return MethodResult("dcf", "Discounted cash flow", None,
-                            skipped_reason="negative free cash flow")
+        return MethodResult("dcf", L("Discounted cash flow", "Flussi di cassa scontati"), None,
+                            skipped_reason=L("negative free cash flow",
+                                             "flusso di cassa libero negativo"))
     fcf_ps = fcf / shares
     g0 = _growth_estimate(metrics)
     if g0 is None:
@@ -253,24 +271,30 @@ def _method_dcf(metrics: Metrics, scenario: Scenario, rate: float) -> MethodResu
     terminal = flow * (1 + gt) / (r - gt)
     value += terminal / (1 + r) ** 5
     return MethodResult(
-        "dcf", "Discounted cash flow", value,
-        detail=f"FCF/share {fcf_ps:.2f}, growth {g0:.1%} fading to {gt:.1%}, rate {r:.1%}",
+        "dcf", L("Discounted cash flow", "Flussi di cassa scontati"), value,
+        detail=L(f"FCF/share {fmt.num(fcf_ps)}, growth {fmt.pct(g0)} fading to {fmt.pct(gt)}, rate "
+                 f"{fmt.pct(r)}",
+                 f"FCF/azione {fmt.num(fcf_ps)}, crescita {fmt.pct(g0)} verso {fmt.pct(gt)}, tasso "
+                 f"{fmt.pct(r)}"),
     )
 
 
 def _method_pb(metrics: Metrics, scenario: Scenario, rate: float) -> MethodResult:
     """P/B giustificato da ROE e crescita: il metodo di riferimento per le banche."""
-    label = "Justified book value (P/B)"
+    label = L("Justified book value (P/B)", "Valore di libro giustificato (P/B)")
     bvps = metrics.valuation.get("bvps")
     roe = metrics.quality.get("roe_avg3") or metrics.quality.get("roe")
     if bvps is None or bvps <= 0:
         return MethodResult("pb", label, None,
-                            skipped_reason="equity per share not available")
+                            skipped_reason=L("equity per share not available",
+                                             "patrimonio netto per azione non disponibile"))
     if roe is None:
-        return MethodResult("pb", label, None, skipped_reason="ROE cannot be computed")
+        return MethodResult("pb", label, None, skipped_reason=L("ROE cannot be computed",
+                                                                "ROE non calcolabile"))
     if roe <= 0:
         return MethodResult("pb", label, None,
-                            skipped_reason="negative ROE: equity is being eroded")
+                            skipped_reason=L("negative ROE: equity is being eroded",
+                                             "ROE negativo: il patrimonio si sta erodendo"))
     g = sustainable_growth(metrics) or 0.02
     g = min(max(g + scenario.growth_shift, -0.02), PERPETUAL_GROWTH_CAP)
     r = max(rate + scenario.rate_shift, g + MIN_DISCOUNT_SPREAD)
@@ -282,12 +306,14 @@ def _method_pb(metrics: Metrics, scenario: Scenario, rate: float) -> MethodResul
     hist_median = (metrics.multiple_history.get("pb") or {}).get("median")
     if hist_median and justified > hist_median * 1.6:
         justified = hist_median * 1.6
-        note = ", capped by the historical P/B"
+        note = L(", capped by the historical P/B", ", limitato dal P/B storico")
     justified = min(max(justified, 0.3), 5.0)
     return MethodResult(
         "pb", label, bvps * justified,
-        detail=f"equity/share {bvps:.2f} x P/B {justified:.2f} "
-               f"(ROE {roe:.1%}, rate {r:.1%}{note})",
+        detail=L(f"equity/share {fmt.num(bvps)} x P/B {fmt.num(justified)} "
+                 f"(ROE {fmt.pct(roe)}, rate {fmt.pct(r)}{note})",
+                 f"patrimonio/azione {fmt.num(bvps)} x P/B {fmt.num(justified)} "
+                 f"(ROE {fmt.pct(roe)}, tasso {fmt.pct(r)}{note})"),
     )
 
 
@@ -297,7 +323,8 @@ def _method_book_floor(metrics: Metrics) -> MethodResult:
     Non e' una valutazione del business, ma un ordine di grandezza del
     "pavimento" patrimoniale. Usato solo per le aziende in perdita.
     """
-    label = "Asset floor (tangible book value)"
+    label = L("Asset floor (tangible book value)",
+              "Pavimento patrimoniale (patrimonio tangibile)")
     shares = metrics.shares
     tangible = None
     if metrics.years is not None and not metrics.years.empty and "tangible_book" in metrics.years.columns:
@@ -307,12 +334,15 @@ def _method_book_floor(metrics: Metrics) -> MethodResult:
         tangible = metrics.ttm.get("equity")
     if tangible is None or shares is None or shares <= 0 or tangible <= 0:
         return MethodResult("book_floor", label, None,
-                            skipped_reason="tangible book value unavailable or negative")
+                            skipped_reason=L("tangible book value unavailable or negative",
+                                             "patrimonio tangibile non disponibile o negativo"))
     bvps = tangible / shares
     # 0,7x il patrimonio tangibile: lo sconto tipico a cui il mercato tratta
     # un'azienda che sta distruggendo valore.
     return MethodResult("book_floor", label, bvps * 0.7,
-                        detail=f"tangible book/share {bvps:.2f} x 0.7 (loss-making company)")
+                        detail=L(f"tangible book/share {fmt.num(bvps)} x 0.7 (loss-making company)",
+                                 f"patrimonio tangibile/azione {fmt.num(bvps)} x 0,7 (azienda in "
+                                 f"perdita)"))
 
 
 # --------------------------------------------------------------------------
@@ -434,31 +464,49 @@ def value_company(metrics: Metrics, *, risk_free: float = RISK_FREE_TH,
     usable = valuation.usable_methods()
     # Affidabilita': quanti modelli indipendenti concordano e quanto sono
     # distanti fra loro. Serve a chi legge per sapere quanto fidarsi del numero.
+    #
+    # `reliability` e' la parola che l'utente legge, quindi cambia con la
+    # lingua; `reliability_key` e' quella che il codice interroga. Erano una
+    # cosa sola, e il confronto su testo tradotto e' esattamente il tipo di
+    # errore che si nasconde: con l'interfaccia inglese il confronto con
+    # "bassa" non era mai vero, e un campanello d'allarme non suonava.
     if not usable or all(m.key == "book_floor" for m in usable):
-        valuation.reliability = "low"
+        valuation.reliability_key = "low"
+        valuation.reliability = L("low", "bassa")
     elif len(usable) >= 3 and (valuation.dispersion or 0) <= 0.55:
-        valuation.reliability = "high"
+        valuation.reliability_key = "high"
+        valuation.reliability = L("high", "alta")
     else:
-        valuation.reliability = "medium"
+        valuation.reliability_key = "medium"
+        valuation.reliability = L("medium", "media")
     if usable and all(m.key == "book_floor" for m in usable):
         valuation.notes.append(
-            "No earnings- or cash-based model applies: the figure shown is only a book-value "
-            "reference, not an estimate of what the business is worth."
+            L("No earnings- or cash-based model applies: the figure shown is only a book-value "
+              "reference, not an estimate of what the business is worth.",
+              "Nessun modello basato su utili o cassa e' applicabile: il valore indicato e' solo "
+              "un "
+              "riferimento patrimoniale, non una stima del valore del business.")
         )
     elif not usable:
         valuation.notes.append(
-            "No valuation model applies (negative earnings and cash flow, no book value): the "
-            "verdict rests only on the quality of the accounts and on the price."
+            L("No valuation model applies (negative earnings and cash flow, no book value): the "
+              "verdict rests only on the quality of the accounts and on the price.",
+              "Nessun modello di valutazione applicabile (utili e flussi di cassa negativi, "
+              "patrimonio non disponibile): il giudizio si basa solo su qualita' dei conti e "
+              "prezzo.")
         )
     elif len(usable) == 1:
         valuation.notes.append(
-            f"Only one usable model ({usable[0].label}): the value estimate is fragile."
+            L(f"Only one usable model ({usable[0].label}): the value estimate is fragile.",
+              f"Un solo modello utilizzabile ({usable[0].label}): la stima di valore e' fragile.")
         )
     if valuation.fair_base and price:
         spread = valuation.dispersion
         if spread is not None and spread > 0.8:
             valuation.notes.append(
-                "Very wide value range: the assumptions matter more than the data, so treat "
-                "the central figure with caution."
+                L("Very wide value range: the assumptions matter more than the data, so treat "
+                  "the central figure with caution.",
+                  "Forchetta di valore molto ampia: le ipotesi contano piu' dei dati, "
+                  "prendere il valore centrale con prudenza.")
             )
     return valuation

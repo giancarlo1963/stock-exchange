@@ -24,6 +24,7 @@ import pandas as pd
 
 from setxray.sources.base import parse_dividend_records
 from setxray.sources.http import FetchError, get_json
+from setxray.lang import L
 
 # Quattro indirizzi da provare: il timeout deve restare basso, altrimenti
 # un sito lento blocca l'analisi per un minuto.
@@ -66,5 +67,7 @@ def dividends(symbol: str) -> Optional[pd.Series]:
         serie = parse_dividend_records(dati)
         if serie is not None and not serie.empty:
             return serie
-        errori.append(f"{url.split('/api/')[-1]}: no dividend recognised in the response")
-    raise FetchError("; ".join(errori[:3]) if errori else "no endpoint available")
+        errori.append(L(f"{url.split('/api/')[-1]}: no dividend recognised in the response",
+                        f"{url.split('/api/')[-1]}: nessun dividendo riconosciuto nella risposta"))
+    raise FetchError("; ".join(errori[:3]) if errori else L("no endpoint available",
+                                                            "nessun indirizzo disponibile"))

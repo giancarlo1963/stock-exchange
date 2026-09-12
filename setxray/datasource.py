@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
 
 import pandas as pd
+from setxray.lang import L
 
 # yfinance racconta ogni tentativo fallito sullo standard error: con la rete
 # instabile l'utente si ritrova venti righe di diagnostica al posto del
@@ -40,24 +41,25 @@ _CACHE_DIR = os.environ.get(
 
 # Elenco indicativo di titoli molto liquidi della SET, usato solo per i
 # suggerimenti rapidi nell'interfaccia. Non e' una lista di raccomandazioni.
-POPULAR_SET_SYMBOLS: tuple[tuple[str, str], ...] = (
-    ("PTT", "PTT (energy)"),
-    ("AOT", "Airports of Thailand"),
-    ("CPALL", "CP All (retail)"),
-    ("ADVANC", "Advanced Info Service"),
-    ("SCB", "SCB X (bank)"),
-    ("KBANK", "Kasikornbank"),
-    ("BBL", "Bangkok Bank"),
-    ("PTTEP", "PTT Exploration & Production"),
-    ("GULF", "Gulf Development"),
-    ("BDMS", "Bangkok Dusit Medical"),
-    ("CPN", "Central Pattana"),
-    ("MINT", "Minor International"),
-    ("SCC", "Siam Cement"),
-    ("TRUE", "True Corporation"),
-    ("BH", "Bumrungrad Hospital"),
-    ("OR", "PTT Oil & Retail"),
-)
+def popular_set_symbols() -> tuple[tuple[str, str], ...]:
+    return (
+        ("PTT", L("PTT (energy)", "PTT (energia)")),
+        ("AOT", "Airports of Thailand"),
+        ("CPALL", "CP All (retail)"),
+        ("ADVANC", "Advanced Info Service"),
+        ("SCB", L("SCB X (bank)", "SCB X (banca)")),
+        ("KBANK", "Kasikornbank"),
+        ("BBL", "Bangkok Bank"),
+        ("PTTEP", "PTT Exploration & Production"),
+        ("GULF", "Gulf Development"),
+        ("BDMS", "Bangkok Dusit Medical"),
+        ("CPN", "Central Pattana"),
+        ("MINT", "Minor International"),
+        ("SCC", "Siam Cement"),
+        ("TRUE", "True Corporation"),
+        ("BH", "Bumrungrad Hospital"),
+        ("OR", "PTT Oil & Retail"),
+    )
 
 
 # --------------------------------------------------------------------------
@@ -72,10 +74,10 @@ def normalize_symbol(raw: str) -> tuple[str, str]:
     ('AOT', 'AOT.BK')
     """
     if raw is None:
-        raise ValueError("Symbol is missing")
+        raise ValueError(L("Symbol is missing", "Simbolo mancante"))
     s = str(raw).strip().upper().replace(" ", "")
     if not s:
-        raise ValueError("Symbol is missing")
+        raise ValueError(L("Symbol is missing", "Simbolo mancante"))
     # Yahoo non quota le classi locali/estere separate (-R, -F, -U): usiamo il
     # titolo principale, che e' quello che interessa a chi investe a 1-2 anni.
     for suffix in ("-R", "-F", "-U", "-W"):
@@ -89,7 +91,7 @@ def normalize_symbol(raw: str) -> tuple[str, str]:
         base = s
     base = base.strip(".")
     if not base:
-        raise ValueError(f"Invalid symbol: {raw!r}")
+        raise ValueError(L(f"Invalid symbol: {raw!r}", f"Simbolo non valido: {raw!r}"))
     return base, base + SET_SUFFIX
 
 
@@ -223,15 +225,17 @@ class StockData:
             return bool(obj)
 
         return {
-            "Price history": ok(self.prices),
-            "SET index": ok(self.benchmark),
-            "Income statement": ok(self.income_a),
-            "Balance sheet": ok(self.balance_a),
-            "Cash flow statement": ok(self.cash_a),
-            "Quarterly figures": ok(self.income_q),
-            "Dividends": ok(self.dividends),
-            "Analyst estimates": ok(self.analyst_targets) or ok(self.earnings_estimate),
-            "Historical multiples": ok(self.valuation_yearly) or ok(self.valuation_quarterly),
+            L("Price history", "Prezzi storici"): ok(self.prices),
+            L("SET index", "Indice SET"): ok(self.benchmark),
+            L("Income statement", "Conto economico"): ok(self.income_a),
+            L("Balance sheet", "Stato patrimoniale"): ok(self.balance_a),
+            L("Cash flow statement", "Rendiconto finanziario"): ok(self.cash_a),
+            L("Quarterly figures", "Trimestrali"): ok(self.income_q),
+            L("Dividends", "Dividendi"): ok(self.dividends),
+            L("Analyst estimates",
+              "Stime analisti"): ok(self.analyst_targets) or ok(self.earnings_estimate),
+            L("Historical multiples",
+              "Multipli storici"): ok(self.valuation_yearly) or ok(self.valuation_quarterly),
         }
 
 
@@ -294,10 +298,12 @@ def _try(data: StockData, label: str, fn, *args, **kwargs):
             warnings.simplefilter("ignore")
             result = fn(*args, **kwargs)
     except Exception as exc:  # rete, rate limit, campo assente su questo titolo
-        data.warnings.append(f"{label}: unavailable ({type(exc).__name__})")
+        data.warnings.append(L(f"{label}: unavailable ({type(exc).__name__})",
+                               f"{label}: non disponibile ({type(exc).__name__})"))
         return None
     if isinstance(result, (pd.DataFrame, pd.Series)) and result.empty:
-        data.warnings.append(f"{label}: Yahoo returns no data for this stock")
+        data.warnings.append(L(f"{label}: Yahoo returns no data for this stock",
+                               f"{label}: Yahoo non restituisce dati per questo titolo"))
         return None
     return result
 
@@ -351,7 +357,7 @@ def fetch_stock(
     data = StockData(symbol=set_symbol, yahoo_symbol=yahoo_symbol)
     ticker = yf.Ticker(yahoo_symbol)
 
-    info = _try(data, "Company summary", lambda: ticker.info) or {}
+    info = _try(data, L("Company summary", "Scheda anagrafica"), lambda: ticker.info) or {}
     data.info = info if isinstance(info, dict) else {}
 
     # auto_adjust=False: serve il prezzo grezzo per i multipli storici
@@ -359,7 +365,7 @@ def fetch_stock(
     data.prices = _normalize_prices(
         _try(
             data,
-            "Price history",
+            L("Price history", "Storico prezzi"),
             ticker.history,
             period=history_period,
             interval="1d",
@@ -377,18 +383,27 @@ def fetch_stock(
                 )
             data.benchmark = _normalize_prices(bench)
         except Exception:
-            data.warnings.append("SET index: comparison with the market is unavailable")
+            data.warnings.append(L("SET index: comparison with the market is unavailable",
+                                   "Indice SET: confronto con il mercato non disponibile"))
 
-    data.income_a = _try(data, "Annual income statement", ticker.get_income_stmt, freq="yearly")
-    data.income_q = _try(data, "Quarterly income statement", ticker.get_income_stmt, freq="quarterly")
-    data.income_ttm = _try(data, "Trailing income statement", ticker.get_income_stmt, freq="trailing")
-    data.balance_a = _try(data, "Annual balance sheet", ticker.get_balance_sheet, freq="yearly")
-    data.balance_q = _try(data, "Quarterly balance sheet", ticker.get_balance_sheet, freq="quarterly")
-    data.cash_a = _try(data, "Annual cash flow statement", ticker.get_cash_flow, freq="yearly")
-    data.cash_q = _try(data, "Quarterly cash flow statement", ticker.get_cash_flow, freq="quarterly")
-    data.cash_ttm = _try(data, "Trailing cash flow statement", ticker.get_cash_flow, freq="trailing")
+    data.income_a = _try(data, L("Annual income statement",
+                                 "Conto economico annuale"), ticker.get_income_stmt, freq="yearly")
+    data.income_q = _try(data, L("Quarterly income statement",
+                                 "Conto economico trimestrale"), ticker.get_income_stmt, freq="quarterly")
+    data.income_ttm = _try(data, L("Trailing income statement",
+                                   "Conto economico TTM"), ticker.get_income_stmt, freq="trailing")
+    data.balance_a = _try(data, L("Annual balance sheet",
+                                  "Stato patrimoniale annuale"), ticker.get_balance_sheet, freq="yearly")
+    data.balance_q = _try(data, L("Quarterly balance sheet",
+                                  "Stato patrimoniale trimestrale"), ticker.get_balance_sheet, freq="quarterly")
+    data.cash_a = _try(data, L("Annual cash flow statement",
+                               "Rendiconto finanziario annuale"), ticker.get_cash_flow, freq="yearly")
+    data.cash_q = _try(data, L("Quarterly cash flow statement",
+                               "Rendiconto finanziario trimestrale"), ticker.get_cash_flow, freq="quarterly")
+    data.cash_ttm = _try(data, L("Trailing cash flow statement",
+                                 "Rendiconto finanziario TTM"), ticker.get_cash_flow, freq="trailing")
 
-    dividends = _try(data, "Dividends", lambda: ticker.dividends)
+    dividends = _try(data, L("Dividends", "Dividendi"), lambda: ticker.dividends)
     if dividends is not None and len(dividends) > 0:
         series = pd.Series(dividends).dropna()
         try:
@@ -397,20 +412,27 @@ def fetch_stock(
             series.index = pd.to_datetime(series.index)
         data.dividends = series.sort_index()
 
-    targets = _try(data, "Analyst price targets", lambda: ticker.analyst_price_targets)
+    targets = _try(data, L("Analyst price targets",
+                           "Target analisti"), lambda: ticker.analyst_price_targets)
     data.analyst_targets = targets if isinstance(targets, dict) else {}
-    data.growth_estimates = _try(data, "Growth estimates", lambda: ticker.growth_estimates)
-    data.earnings_estimate = _try(data, "Earnings per share estimates", lambda: ticker.earnings_estimate)
-    data.revenue_estimate = _try(data, "Revenue estimates", lambda: ticker.revenue_estimate)
-    data.recommendations = _try(data, "Analyst ratings", lambda: ticker.recommendations)
+    data.growth_estimates = _try(data, L("Growth estimates",
+                                         "Stime di crescita"), lambda: ticker.growth_estimates)
+    data.earnings_estimate = _try(data, L("Earnings per share estimates",
+                                          "Stime utile per azione"), lambda: ticker.earnings_estimate)
+    data.revenue_estimate = _try(data, L("Revenue estimates",
+                                         "Stime ricavi"), lambda: ticker.revenue_estimate)
+    data.recommendations = _try(data, L("Analyst ratings",
+                                        "Rating analisti"), lambda: ticker.recommendations)
 
     # Storico dei multipli (P/E, P/B, EV/EBITDA) cosi' come li calcola Yahoo:
     # serve a dire se il titolo e' caro o economico *rispetto a se stesso*.
     data.valuation_yearly = _try(
-        data, "Annual historical multiples", ticker.get_valuation_measures, freq="yearly", periods=12
+        data, L("Annual historical multiples",
+                "Multipli storici annuali"), ticker.get_valuation_measures, freq="yearly", periods=12
     )
     data.valuation_quarterly = _try(
-        data, "Quarterly historical multiples", ticker.get_valuation_measures, freq="quarterly", periods=24
+        data, L("Quarterly historical multiples",
+                "Multipli storici trimestrali"), ticker.get_valuation_measures, freq="quarterly", periods=24
     )
 
     if data.prices is not None:

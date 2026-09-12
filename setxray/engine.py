@@ -27,6 +27,7 @@ from setxray.valuation import (
     Valuation,
     value_company,
 )
+from setxray.lang import L
 
 
 class NoDataError(RuntimeError):
@@ -77,8 +78,10 @@ def analyze_data(data: StockData, *, risk_free: float = RISK_FREE_TH,
     metrics = compute_metrics(data)
     if metrics.price is None:
         raise NoDataError(
-            f"No price available for {data.symbol}. Check the symbol: it must be a SET "
-            "ticker, for example PTT, AOT or CPALL."
+            L(f"No price available for {data.symbol}. Check the symbol: it must be a SET "
+              "ticker, for example PTT, AOT or CPALL.",
+              f"Nessun prezzo disponibile per {data.symbol}. Controlla il simbolo: "
+              "deve essere quello della SET, per esempio PTT, AOT, CPALL.")
         )
     valuation = value_company(metrics, risk_free=risk_free, erp=erp)
     verdict = evaluate(metrics, valuation)
@@ -113,8 +116,10 @@ def analyze(symbol: str, *, cache_ttl_min: float = DEFAULT_CACHE_TTL_MIN,
     data = fetch_stock(symbol, cache_ttl_min=cache_ttl_min, history_period=history_period)
     if data.prices is None and not data.info:
         raise NoDataError(
-            f"Yahoo Finance returns no data for {data.yahoo_symbol}. Check that the symbol "
-            "exists on the SET and that you have an internet connection."
+            L(f"Yahoo Finance returns no data for {data.yahoo_symbol}. Check that the symbol "
+              "exists on the SET and that you have an internet connection.",
+              f"Yahoo Finance non restituisce dati per {data.yahoo_symbol}. "
+              "Verifica che il simbolo esista alla SET e che ci sia connessione a internet.")
         )
     return analyze_data(data, risk_free=risk_free, erp=erp,
                         dividend_sources=dividend_sources)

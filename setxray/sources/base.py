@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Optional
 
 import pandas as pd
+from setxray.lang import L
 
 # Chiavi che, nei JSON delle varie fonti, contengono la data dello stacco e
 # l'importo per azione. Ogni fonte usa nomi diversi; teniamo l'elenco in un
@@ -91,15 +92,20 @@ class DividendSet:
         """Una riga che dice da dove vengono i numeri e perche'."""
         scelta = self.chosen_result()
         if scelta is None:
-            return "No source returned any dividends."
+            return L("No source returned any dividends.",
+                     "Nessuna fonte ha restituito dividendi.")
         altre = [r for r in self.working_sources() if r.key != self.chosen]
-        testo = (f"{scelta.label}: {scelta.payments} payments over "
-                 f"{scelta.span_years:.1f} years")
+        testo = (L(f"{scelta.label}: {scelta.payments} payments over "
+                   f"{scelta.span_years:.1f} years",
+                   f"{scelta.label}: {scelta.payments} stacchi su "
+                   f"{scelta.span_years:.1f} anni"))
         if altre:
-            testo += (f". Confirmed by {len(altre)} other source"
-                      + ("" if len(altre) == 1 else "s"))
+            testo += (L(f". Confirmed by {len(altre)} other source",
+                        f". Confermata da {len(altre)} altra fonte")
+                      + ("" if len(altre) == 1 else L("s", "/i")))
         else:
-            testo += ". No second source available for comparison"
+            testo += L(". No second source available for comparison",
+                       ". Nessuna seconda fonte disponibile per il confronto")
         return testo
 
 
@@ -263,17 +269,22 @@ def _registro() -> list[SourceSpec]:
     from setxray.sources import alphavantage, csvfile, eodhd, fmp, setofficial, yahoo
 
     return [
-        SourceSpec("set", "SET (official website)", 5, None, setofficial.dividends,
-                   "the authoritative source; its public interface is undocumented, so "
-                   "check the result on first use"),
-        SourceSpec("csv", "Local CSV file", 5, None, csvfile.dividends,
-                   "data/<SYMBOL>-dividends.csv with date,amount columns"),
+        SourceSpec("set", L("SET (official website)",
+                            "SET (sito ufficiale)"), 5, None, setofficial.dividends,
+                   L("the authoritative source; its public interface is undocumented, so "
+                     "check the result on first use",
+                     "fonte autorevole; interfaccia pubblica non documentata, "
+                     "verificane l'esito al primo uso")),
+        SourceSpec("csv", L("Local CSV file", "File CSV locale"), 5, None, csvfile.dividends,
+                   L("data/<SYMBOL>-dividends.csv with date,dividend columns",
+                     "data/<SIMBOLO>-dividends.csv con colonne date,dividend")),
         SourceSpec("eodhd", "EOD Historical Data", 4, "EODHD_API_KEY", eodhd.dividends),
         SourceSpec("fmp", "Financial Modeling Prep", 3, "FMP_API_KEY", fmp.dividends),
         SourceSpec("alphavantage", "Alpha Vantage", 3, "ALPHAVANTAGE_API_KEY",
                    alphavantage.dividends),
         SourceSpec("yahoo", "Yahoo Finance", 2, None, yahoo.dividends,
-                   "always available, but on SET stocks it can miss payments"),
+                   L("always available, but on SET stocks it can miss payments",
+                     "sempre disponibile, ma sui titoli SET puo' saltare stacchi")),
     ]
 
 
@@ -283,7 +294,7 @@ def describe_sources() -> list[dict[str, Any]]:
         "key": spec.key,
         "source": spec.label,
         "trust": spec.trust,
-        "api_key": spec.env_key or "not needed",
+        "api_key": spec.env_key or L("not needed", "non serve"),
         "active": spec.available,
         "note": spec.note,
     } for spec in _registro()]
@@ -324,8 +335,9 @@ def collect_dividends(symbol: str, *, only: Optional[Iterable[str]] = None,
         pulita = clean_series(fallback, symbol=symbol)
         insieme.results.append(SourceResult(
             "yahoo", "Yahoo Finance", 2, series=pulita,
-            error=None if pulita is not None else "no dividend in the history",
-            note="downloaded together with the prices",
+            error=None if pulita is not None else L("no dividend in the history",
+                                                    "nessun dividendo nello storico"),
+            note=L("downloaded together with the prices", "scaricata con i prezzi"),
         ))
 
     for spec in _registro():
@@ -336,7 +348,8 @@ def collect_dividends(symbol: str, *, only: Optional[Iterable[str]] = None,
         if not spec.available:
             insieme.results.append(SourceResult(
                 spec.key, spec.label, spec.trust,
-                error=f"missing API key ({spec.env_key})", note=spec.note))
+                error=L(f"missing API key ({spec.env_key})",
+                        f"manca la chiave API ({spec.env_key})"), note=spec.note))
             continue
         try:
             serie = clean_series(spec.loader(symbol), symbol=symbol)
@@ -347,14 +360,17 @@ def collect_dividends(symbol: str, *, only: Optional[Iterable[str]] = None,
             continue
         insieme.results.append(SourceResult(
             spec.key, spec.label, spec.trust, series=serie,
-            error=None if serie is not None else "no dividend returned",
+            error=None if serie is not None else L("no dividend returned",
+                                                   "nessun dividendo restituito"),
             note=spec.note))
 
     funzionanti = insieme.working_sources()
     if not funzionanti:
         insieme.notes.append(
-            "No source returned dividends for this stock. It may simply not pay one, or "
-            "there may be a network or symbol problem."
+            L("No source returned dividends for this stock. It may simply not pay one, or "
+              "there may be a network or symbol problem.",
+              "Nessuna fonte ha restituito dividendi per questo titolo. Puo' essere un "
+              "titolo che non distribuisce, oppure un problema di rete o di simbolo.")
         )
         return insieme
 
@@ -366,8 +382,10 @@ def collect_dividends(symbol: str, *, only: Optional[Iterable[str]] = None,
     insieme.disagreements = _confronta(funzionanti, migliore)
     if len(funzionanti) == 1:
         insieme.notes.append(
-            f"Only one source available ({migliore.label}): the dividends have not been "
-            "checked against any other archive."
+            L(f"Only one source available ({migliore.label}): the dividends have not been "
+              "checked against any other archive.",
+              f"Una sola fonte disponibile ({migliore.label}): i dividendi non sono "
+              "stati verificati contro nessun altro archivio.")
         )
     return insieme
 
@@ -393,9 +411,12 @@ def _confronta(risultati: list[SourceResult], scelta: SourceResult) -> list[str]
         if len(rapporti) >= 3 and (rapporti.between(95, 105).mean() > 0.6
                                    or rapporti.between(0.0095, 0.0105).mean() > 0.6):
             avvisi.append(
-                f"{risultato.label} reports amounts on a different scale (factor of ~100): "
-                "probably baht confused with satang. Check which of the two matches the SET "
-                "website."
+                L(f"{risultato.label} reports amounts on a different scale (factor of ~100): "
+                  "probably baht confused with satang. Check which of the two matches the SET "
+                  "website.",
+                  f"{risultato.label} riporta importi in scala diversa (fattore ~100): "
+                  "probabile confusione fra baht e satang. Controlla quale delle due "
+                  "corrisponde al sito della SET.")
             )
             continue
         discordanti = [int(anno) for anno in comuni
@@ -404,7 +425,9 @@ def _confronta(risultati: list[SourceResult], scelta: SourceResult) -> list[str]
         if discordanti:
             elenco = ", ".join(str(a) for a in sorted(discordanti)[:6])
             avvisi.append(
-                f"{risultato.label} disagrees with {scelta.label} on {len(discordanti)} "
-                f"years ({elenco}): a difference of more than 5%."
+                L(f"{risultato.label} disagrees with {scelta.label} on {len(discordanti)} "
+                  f"years ({elenco}): a difference of more than 5%.",
+                  f"{risultato.label} non concorda con {scelta.label} su {len(discordanti)} "
+                  f"anni ({elenco}): differenza oltre il 5%.")
             )
     return avvisi

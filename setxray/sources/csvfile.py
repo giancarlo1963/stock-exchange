@@ -31,6 +31,8 @@ from typing import Optional
 
 import pandas as pd
 
+from setxray.lang import L
+
 from setxray.sources.base import CHIAVI_DATA, CHIAVI_IMPORTO, _to_date, clean_series
 from setxray.sources.http import FetchError
 
@@ -86,7 +88,8 @@ def parse_csv(testo: str) -> Optional[pd.Series]:
     else:
         corpo = righe[1:]
     if len(intestazione) < 2:
-        raise FetchError("the CSV needs at least two columns: date and amount")
+        raise FetchError(L("the CSV needs at least two columns: date and amount",
+                           "il CSV deve avere almeno due colonne: data e importo"))
 
     importi: dict = {}
     for riga in corpo:

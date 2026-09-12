@@ -1,30 +1,50 @@
-"""Number formatting, shared by text, charts and the CLI.
+"""Formattazione dei numeri, condivisa da testo, grafici e CLI.
 
-One place for every number the user reads, so the whole app agrees on
-separators, decimals and how a missing value is written.
+Un posto solo per ogni numero che l'utente legge, cosi' tutta l'app concorda
+su separatori, decimali e su come si scrive un valore che manca.
+
+Le due lingue non scrivono i numeri allo stesso modo: in inglese la virgola
+separa le migliaia e il punto i decimali (1,234.50), in italiano il contrario
+(1.234,50). Cambiano anche le abbreviazioni delle scale (bn / mld) e il modo
+di scrivere una data. Quindi la lingua non tocca solo le parole: tocca ogni
+cifra, e per questo passa da qui.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-NA = "n/a"
+from setxray.lang import L, language
+
+# Scambia i due separatori in un colpo solo: senza tabella servirebbe un
+# segnaposto intermedio per non sovrascrivere la prima sostituzione.
+_ITALIANO = str.maketrans({",": ".", ".": ","})
+
+# Le scale: (soglia, sigla inglese, sigla italiana, decimali). In inglese la
+# sigla sta attaccata al numero (98.3bn), in italiano staccata (98,3 mld).
+_SCALE = ((1e9, "bn", "mld", 1), (1e6, "m", "mln", 1), (1e3, "k", "mila", 1))
+
+
+def na() -> str:
+    """Come si scrive un valore che manca. Mai lasciato vuoto, mai stimato."""
+    return L("n/a", "n/d")
 
 
 def num(value: Optional[float], decimals: int = 2) -> str:
-    """1234.5 -> '1,234.50'"""
+    """1234.5 -> '1,234.50' in inglese, '1.234,50' in italiano."""
     if value is None:
-        return NA
+        return na()
     try:
-        return f"{float(value):,.{decimals}f}"
+        testo = f"{float(value):,.{decimals}f}"
     except (TypeError, ValueError):
-        return NA
+        return na()
+    return testo.translate(_ITALIANO) if language() == "it" else testo
 
 
 def pct(value: Optional[float], decimals: int = 1, sign: bool = False) -> str:
-    """0.0825 -> '8.3%' (with sign=True and a positive value -> '+8.3%')"""
+    """0.0825 -> '8.3%' (con sign=True e valore positivo -> '+8.3%')"""
     if value is None:
-        return NA
+        return na()
     formatted = num(value * 100, decimals)
     if sign and value > 0:
         formatted = "+" + formatted
@@ -33,35 +53,41 @@ def pct(value: Optional[float], decimals: int = 1, sign: bool = False) -> str:
 
 def mult(value: Optional[float], decimals: int = 1) -> str:
     """12.34 -> '12.3x'"""
-    return NA if value is None else num(value, decimals) + "x"
+    return na() if value is None else num(value, decimals) + "x"
 
 
 def money(value: Optional[float], currency: str = "THB", decimals: int = 2) -> str:
-    return NA if value is None else f"{num(value, decimals)} {currency}"
+    return na() if value is None else f"{num(value, decimals)} {currency}"
 
 
 def big(value: Optional[float], currency: str = "THB") -> str:
-    """Large amounts on a readable scale: 98_300_000_000 -> '98.3bn THB'."""
+    """Importi grandi in scala leggibile: 98_300_000_000 -> '98.3bn THB'."""
     if value is None:
-        return NA
+        return na()
     absolute = abs(value)
-    # Above a billion we stay on "bn": a Thai market cap of 1,500bn THB reads
-    # better that way than in another unit.
-    for threshold, label, digits in ((1e9, "bn", 1), (1e6, "m", 1), (1e3, "k", 1)):
+    # Sopra il miliardo restiamo su "bn": una capitalizzazione thailandese da
+    # 1,500bn THB si legge meglio cosi' che con un'altra unita'.
+    for threshold, inglese, italiano, digits in _SCALE:
         if absolute >= threshold:
-            return f"{num(value / threshold, digits)}{label} {currency}"
+            scala = num(value / threshold, digits)
+            return L(f"{scala}{inglese} {currency}", f"{scala} {italiano} {currency}")
     return f"{num(value, 0)} {currency}"
 
 
 def ratio(value: Optional[float], decimals: int = 2) -> str:
-    return NA if value is None else num(value, decimals)
+    return na() if value is None else num(value, decimals)
 
 
 def date(value) -> str:
-    """Day-month-year with the month spelled out: no US/European ambiguity."""
+    """In inglese il mese scritto (11 Sep 2026), in italiano in cifre.
+
+    Il mese scritto evita l'ambiguita' fra 09/11 e 11/09, che in inglese
+    cambia significato fra Stati Uniti ed Europa. In italiano quel dubbio non
+    c'e' - il giorno viene sempre prima - e le cifre sono piu' compatte.
+    """
     if value is None:
-        return NA
+        return na()
     try:
-        return value.strftime("%d %b %Y")
+        return value.strftime(L("%d %b %Y", "%d/%m/%Y"))
     except AttributeError:
         return str(value)

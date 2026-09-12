@@ -4,7 +4,7 @@ bilancio prevalgano sempre sul prezzo conveniente."""
 
 import pytest
 
-from setxray.demo import PROFILES, build_demo
+from setxray.demo import PROFILE_KEYS, build_demo
 from setxray.engine import analyze_data
 from setxray.metrics import compute_metrics
 from setxray.scoring import BUY, HOLD, SELL, Flag, band, detect_flags, evaluate
@@ -41,7 +41,7 @@ class TestVerdettiSuiProfiliNoti:
     def test_azione_attesa(self, profilo, atteso):
         assert analyze_data(build_demo(profilo)).verdict.action == atteso
 
-    @pytest.mark.parametrize("profilo", list(PROFILES))
+    @pytest.mark.parametrize("profilo", list(PROFILE_KEYS))
     def test_il_verdetto_e_sempre_completo(self, profilo):
         d = analyze_data(build_demo(profilo)).verdict
         assert d.action in (BUY, HOLD, SELL)
@@ -78,14 +78,14 @@ class TestPrecedenzaDeiProblemiGravi:
         finally:
             scoring.detect_flags = vero
 
-    @pytest.mark.parametrize("profilo", list(PROFILES))
+    @pytest.mark.parametrize("profilo", list(PROFILE_KEYS))
     def test_due_problemi_gravi_portano_sempre_a_vendere(self, profilo):
         dopo = self._verdetto_con(profilo, [Flag("grave", "Shareholders' equity is negative."),
                                             Flag("grave", "Interest costs are not covered.")])
         assert dopo.action == SELL
         assert dopo.conviction == "high"
 
-    @pytest.mark.parametrize("profilo", list(PROFILES))
+    @pytest.mark.parametrize("profilo", list(PROFILE_KEYS))
     def test_un_solo_problema_grave_esclude_comunque_l_acquisto(self, profilo):
         """Ci si puo' arrivare per due strade - la penalita' sul segnale o il
         vincolo esplicito - e il test copre entrambe senza legarsi a quale
