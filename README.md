@@ -1,327 +1,338 @@
 # SET X-Ray
 
-Analisi dei **dividendi degli ultimi dieci anni** di un'azione della **Stock
-Exchange of Thailand**, con un segnale operativo spiegato.
+Analysis of the **last ten years of dividends** of a **Stock Exchange of
+Thailand** share, with a trading signal that explains itself.
 
-Dai un simbolo — `PTT`, `AOT`, `CPALL` — e lo strumento ricostruisce ogni stacco
-degli ultimi dieci anni, misura crescita, tagli e continuità, calcola quanta
-parte del rendimento è arrivata dalle cedole invece che dal prezzo, valuta se il
-dividendo regge, stima cosa pagherà nei prossimi due anni, e risponde a una sola
-domanda:
+Give it a symbol — `PTT`, `AOT`, `CPALL` — and the tool reconstructs every
+payment of the last ten years, measures growth, cuts and continuity, works out
+how much of the return came from the coupons rather than from the price, judges
+whether the dividend will hold, estimates what it will pay over the next two
+years, and answers a single question:
 
-> **Compro, mantengo o vendo? E perché?**
+> **Do I buy, hold or sell? And why?**
 
-L'orizzonte è **1-2 anni minimo**. Non è uno strumento di trading.
+The horizon is **one to two years at the very least**. This is not a trading
+tool.
 
-![Schermata principale](docs/schermata-dividendi.png)
+![Main screen](docs/screenshot-dividends.png)
 
-Il caso che conta: dieci anni di stacchi con il taglio del 2020 segnato in rosso
-e la stima dei prossimi due anni con la sua forchetta.
+The case that matters: ten years of payments with the 2020 cut marked in red and
+the estimate for the next two years with its range.
 
-![Dividendo per azione con il taglio](docs/dividendo-tagliato.png)
+![Dividend per share with the cut](docs/dividend-cut.png)
 
-Quanto del rendimento è arrivato dalle cedole e quanto dal prezzo.
+How much of the return came from the coupons and how much from the price.
 
-![Scomposizione del rendimento](docs/rendimento-totale.png)
+![Return breakdown](docs/total-return.png)
 
-Da dove viene il punteggio di solidità, fattore per fattore.
+Where the safety score comes from, factor by factor.
 
-![Fattori della solidità](docs/solidita-fattori.png)
+![Safety factors](docs/safety-factors.png)
 
 ---
 
-## Provarlo dal telefono
+## Trying it from a phone
 
-Non serve installare niente: **[anteprima interattiva](https://claude.ai/code/artifact/a40605c8-4d90-44da-83c7-c7ddcb5fa1a1)**
-con quattro aziende di prova e i risultati veri del motore di analisi. Dati
-sintetici, per capire come ragiona lo strumento.
+Nothing to install: **[interactive preview](https://claude.ai/code/artifact/a40605c8-4d90-44da-83c7-c7ddcb5fa1a1)**
+with six test companies and the real output of the analysis engine. Synthetic
+data, there to show how the tool reasons.
 
-Per i **titoli veri** serve tenere l'app online, perche' l'analisi gira in
-Python e scarica i dati al momento. Si fa gratis da Streamlit Community Cloud,
-anche dal browser del telefono:
+For **real stocks** the app has to be online, because the analysis runs in
+Python and fetches the data on the spot. That is free on Streamlit Community
+Cloud, and can be done from a phone browser:
 
-**[Modulo di pubblicazione gia' compilato](https://share.streamlit.io/deploy?repository=giancarlo1963%2Fstock-exchange&branch=claude%2Fthailand-equity-analyzer-rfrfkp&mainModule=app.py)**
-— entra con GitHub, premi *Deploy*, aspetta un paio di minuti. Ottieni un
-indirizzo tuo da aggiungere alla schermata Home.
+**[Pre-filled publishing form](https://share.streamlit.io/deploy?repository=giancarlo1963%2Fstock-exchange&branch=claude%2Fthailand-equity-analyzer-rfrfkp&mainModule=app.py)**
+— sign in with GitHub, press *Deploy*, wait a couple of minutes. You get an
+address of your own to add to the home screen.
 
-Una avvertenza su quella strada: Yahoo Finance limita le richieste per
-indirizzo IP, e su un servizio condiviso capita di incontrare il limite piu'
-spesso che da casa. Se accade, aspetta qualche minuto o fornisci i dividendi
-via CSV (vedi sotto), che non dipende da nessuna API.
+One warning about that route: Yahoo Finance rate-limits by IP address, and on a
+shared service you hit the limit more often than from home. If that happens,
+wait a few minutes or supply the dividends by CSV (see below), which depends on
+no API at all.
 
-## Installazione locale
+## Local install
 
-Serve Python 3.10 o successivo.
+Needs Python 3.10 or later.
 
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Da terminale:
+From the terminal:
 
 ```bash
-python -m setxray PTT                 # analisi completa
-python -m setxray PTT --dividendi      # solo i dividendi a dieci anni
-python -m setxray --fonti              # quali archivi sono attivi
-python -m setxray AOT --report aot.md   # salva il report in markdown
-python -m setxray demo:tagliato         # dati finti, senza internet
+python -m setxray PTT                  # full analysis
+python -m setxray PTT --dividends       # the ten-year dividend section only
+python -m setxray --sources             # which archives are active
+python -m setxray AOT --report aot.md   # save the report as markdown
+python -m setxray demo:tagliato         # made-up data, no internet
 ```
 
-Come libreria:
+As a library:
 
 ```python
 from setxray import analyze
 
 a = analyze("PTT")
-print(a.dividends.signal.headline)         # "COMPRA per il dividendo - convinzione media"
+print(a.dividends.signal.headline)          # "BUY for the dividend - medium conviction"
 print(a.dividends.yield_stats["attuale"])   # 0.0612
 print(a.dividends.safety.score)             # 71
 print(a.report())
 ```
 
-### Senza internet
+### Without internet
 
-Sei aziende inventate coprono i casi tipici. I numeri sono sintetici e le
-società non esistono.
+Six invented companies cover the typical cases. The numbers are synthetic and
+the companies do not exist.
 
-| Profilo | Cosa rappresenta |
+| Profile | What it represents |
 |---|---|
-| `demo:dividendo` | cedola generosa e crescente da dieci anni, prezzo ragionevole |
-| `demo:tagliato` | **ha tagliato il 55% nel 2020**: oggi rende il 14% perché il prezzo è crollato |
-| `demo:irregolare` | paga solo negli anni buoni, ne salta quattro su dieci |
-| `demo:solida` | azienda in crescita, conti sani, prezzo sotto la sua media |
-| `demo:cara` | buona azienda pagata molto più di quanto sia mai valsa |
-| `demo:difficolta` | non distribuisce: perdite, debito, cassa negativa |
+| `demo:dividendo` | a generous coupon, growing for ten years, at a reasonable price |
+| `demo:tagliato` | **cut by 55% in 2020**: yields 14% today because the price collapsed |
+| `demo:irregolare` | pays only in good years, skipping four out of ten |
+| `demo:solida` | a growing company, healthy accounts, priced below its own average |
+| `demo:cara` | a good company paid far more than it has ever been worth |
+| `demo:difficolta` | pays nothing: losses, debt, negative cash flow |
 
-`demo:tagliato` è quello che conta di più: mostra come lo strumento distingue un
-rendimento alto perché il titolo è a sconto da un rendimento alto perché il
-mercato si aspetta un altro taglio.
+`demo:tagliato` is the one that matters most: it shows how the tool tells a high
+yield caused by a stock trading at a discount apart from a high yield caused by a
+market expecting another cut.
 
 ---
 
-## Le fonti dei dati
+## Where the data comes from
 
-Sui titoli thailandesi il dividendo è il dato più facile da sbagliare: Yahoo
-Finance a volte salta uno stacco, a volte confonde baht e satang, a volte
-registra la data con qualche giorno di scarto. Su dieci anni questi errori
-cambiano le conclusioni.
+On Thai stocks the dividend is the figure that is easiest to get wrong: Yahoo
+Finance sometimes skips a payment, sometimes confuses baht and satang, sometimes
+records the date a few days out. Over ten years those errors change the
+conclusions.
 
-Per questo lo strumento **interroga più archivi, tiene la serie più lunga e
-dichiara dove le fonti non vanno d'accordo** — senza tentare di riconciliarle:
-sapere che due archivi divergono vale più di una media fra i due.
+That is why the tool **queries several archives, keeps the longest series and
+declares where the sources disagree** — with no attempt to reconcile them:
+knowing that two archives diverge is worth more than an average of the two.
 
-| Fonte | Chiave | Come si attiva | Note |
+| Source | Key | How to activate it | Notes |
 |---|---|---|---|
-| **SET (sito ufficiale)** | non serve | attiva | La fonte autorevole. L'interfaccia pubblica non è documentata: prova più indirizzi e si può imporre il proprio con `SETXRAY_SET_API`. **Da verificare al primo uso.** |
-| **File CSV locale** | non serve | attiva | Funziona sempre, non dipende da nessuna API. Vedi sotto. |
-| **EOD Historical Data** | `EODHD_API_KEY` | chiave gratuita su eodhd.com | Buona copertura dei dividendi asiatici. |
-| **Financial Modeling Prep** | `FMP_API_KEY` | chiave gratuita su financialmodelingprep.com | Piano gratuito limitato. |
-| **Alpha Vantage** | `ALPHAVANTAGE_API_KEY` | chiave gratuita su alphavantage.co | 25 chiamate al giorno; suffisso `.BKK`. |
-| **Yahoo Finance** | non serve | attiva | Sempre disponibile, la meno affidabile sui titoli SET: resta la riserva. |
+| **SET (official website)** | not needed | active | The authoritative source. Its public interface is undocumented: the tool tries several addresses, and you can force your own with `SETXRAY_SET_API`. **Check the result on first use.** |
+| **Local CSV file** | not needed | active | Always works, depends on no API. See below. |
+| **EOD Historical Data** | `EODHD_API_KEY` | free key at eodhd.com | Good coverage of Asian dividends. |
+| **Financial Modeling Prep** | `FMP_API_KEY` | free key at financialmodelingprep.com | Limited free plan. |
+| **Alpha Vantage** | `ALPHAVANTAGE_API_KEY` | free key at alphavantage.co | 25 calls a day; `.BKK` suffix. |
+| **Yahoo Finance** | not needed | active | Always available, the least reliable on SET stocks: it stays the fallback. |
 
 ```bash
-export EODHD_API_KEY=...          # attiva una fonte
-export SETXRAY_SOURCES=csv,yahoo   # limita le fonti (più veloce)
-python -m setxray --fonti           # verifica cosa è attivo
+export EODHD_API_KEY=...           # activate a source
+export SETXRAY_SOURCES=csv,yahoo    # restrict the sources (faster)
+python -m setxray --sources          # check what is active
 ```
 
-### Il percorso che funziona sempre: il CSV
+### The route that always works: the CSV
 
-Nessuna API è garantita nel tempo. Questa strada no. Copia dal sito della SET la
-tabella degli stacchi e salvala come `dati/<SIMBOLO>-dividendi.csv`:
+No API is guaranteed to last. This one is. Copy the table of payments from the
+SET website and save it as `data/<SYMBOL>-dividends.csv`:
 
 ```
-data,importo
+date,dividend
 2016-04-25,1.10
 2016-09-05,1.10
 2017-04-24,1.20
 ```
 
-Vanno bene anche `date,dividend`, il punto e virgola come separatore e la virgola
-decimale. **Le date si leggono con il giorno prima del mese**, come scrive la SET
-(`05/09/2024` è il 5 settembre). Il file viene trattato come la fonte più
-affidabile e usato al posto delle API.
+`data,importo` works too, as do the semicolon as a separator and the comma as a
+decimal mark. **Dates are read day before month**, the way the SET writes them
+(`05/09/2024` is 5 September). The file is treated as the most reliable source
+and used instead of the APIs.
 
-Prezzi, bilanci e flussi di cassa arrivano da Yahoo Finance: lì la copertura è
-buona anche sui titoli SET.
-
----
-
-## Cosa calcola, e come
-
-### 1. Dieci anni di distribuzione
-
-Dividendo per azione anno per anno, con l'anno in corso tenuto fuori da ogni
-media (è incompleto per definizione). Crescita media a 3, 5 e 10 anni; tagli con
-il loro anno e la loro entità; anni saltati; aumenti consecutivi; cadenza degli
-stacchi.
-
-Due accortezze che cambiano i numeri:
-
-- **Tagli e aumenti si contano solo fra anni solari consecutivi.** Un titolo che
-  salta il 2020 e il 2021 non ha "tagliato" passando dal 2019 al 2022.
-- **Con un anno a zero dentro la finestra, la crescita media non viene
-  calcolata.** Su un pagatore irregolare un CAGR non significa niente, e
-  dichiararlo assente è più utile che inventarlo.
-
-### 2. Quanto del rendimento è venuto dalle cedole
-
-Rendimento totale a dieci anni con i dividendi reinvestiti a ogni stacco,
-confrontato con il solo prezzo. Su un titolo da reddito è il numero che dice se
-la promessa è stata mantenuta: un prezzo fermo da dieci anni con un 6% annuo
-incassato non è un investimento fallito. **La quota può superare il 100%**: se il
-prezzo è scesso, le cedole hanno prodotto tutto il rendimento e coperto anche la
-perdita.
-
-### 3. Il prezzo di oggi è generoso?
-
-Il rendimento attuale viene confrontato con la **propria** storia, non con una
-media di mercato: oltre duemila osservazioni giornaliere su dieci anni, con
-mediana, quartili e percentile.
-
-Un dettaglio che sembra tecnico e non lo è: la serie storica e il rendimento di
-oggi usano **lo stesso criterio** (gli ultimi N stacchi su base annua, con N la
-cadenza abituale). Una finestra di 365 giorni su stacchi a date quasi fisse ne
-racchiude ora due e ora uno a seconda del giorno, e il percentile finirebbe per
-confrontare due misure diverse.
-
-### 4. Il dividendo regge?
-
-Un punteggio 0-100 che parte da 50 e somma i punti di sette fattori, **ognuno
-visibile con i suoi punti e la sua spiegazione**: quota di utili distribuita,
-copertura con la cassa libera vera, debito netto/EBITDA, andamento degli utili,
-storia dei tagli, continuità del pagamento, crescita del dividendo.
-
-È **una regola dichiarata, non un modello statistico addestrato** su una base
-storica di tagli. Il vantaggio è che si può vedere da dove viene il numero e non
-essere d'accordo su un fattore.
-
-Tre correttivi imparati sui casi veri:
-
-- La crescita del dividendo usa la misura **più prudente** fra 5 e 10 anni: dopo
-  un taglio la media a cinque anni misura la risalita dal minimo e premierebbe
-  proprio chi ha tagliato.
-- Chi **salta anni** non può superare 45 punti (35 se ne salta tre o più), per
-  quanto sia prudente il payout negli anni in cui paga.
-- Un rendimento oltre **1,7 volte** la propria mediana alza il rischio di taglio:
-  quando la cedola rende molto più del solito, di norma il mercato sta già
-  scontando qualcosa.
-
-### 5. Cosa pagherà nei prossimi due anni
-
-Tre metodi indipendenti, pesati e tenuti visibili: **tendenza storica smorzata**
-(la crescita passata usata al 60%, perché una retta sui logaritmi estrapola con
-troppa sicurezza), **quota di utili sull'utile atteso**, **quota della cassa
-libera**. Ne esce una forchetta, non un numero secco. Quando il rischio di taglio
-è alto, lo scenario pessimistico assume una riduzione del 40-50%.
-
-### 6. Il segnale, e perché
-
-La valutazione è il ritorno del rendimento verso la sua mediana: se il titolo ha
-reso storicamente il 5% e oggi rende il 7%, a dividendo confermato il prezzo
-"normale" è più alto. A questo si aggiungono due anni di cedole incassate.
-
-Tre freni, tutti nati da errori visti in collaudo:
-
-- **Il ritorno alla mediana si assume solo a metà.** Se il prezzo ha avuto una
-  tendenza lunga, la vecchia mediana descrive un'azienda e un mercato diversi da
-  quelli di oggi.
-- **Un dividendo fragile merita in modo permanente un rendimento più alto.** Sotto
-  60 punti di solidità il rendimento obiettivo viene alzato fino al +90%: chi
-  assume il ritorno alla vecchia mediana sta scommettendo che l'azienda torni
-  quella di prima.
-- **Quando un taglio è probabile, il titolo si valuta sul dividendo tagliato.** È
-  l'errore più costoso di un modello sui dividendi: senza questo correttivo il
-  profilo `demo:tagliato` dava **+112%** di rendimento atteso a due anni su
-  un'azienda il cui dividendo era a rischio. Con il correttivo dà -35%.
-
-Prezzo d'ingresso, valore stimato e prezzo di alleggerimento nascono dallo stesso
-rendimento obiettivo, così i tre numeri non raccontano storie diverse: si compra
-quando la cedola rende un quinto in più di quanto il titolo merita, si alleggerisce
-quando rende un quinto in meno.
-
-### 7. Il segnale ha mai funzionato su questo titolo?
-
-Questa parte è misurata, non affermata. Per ogni fine mese degli ultimi dieci anni
-lo strumento guarda in che percentile stava il rendimento rispetto ai tre anni
-precedenti, e misura il rendimento totale dei **due anni successivi**. Poi
-confronta i gruppi.
-
-I limiti sono dichiarati accanto al risultato: un titolo solo, un periodo solo,
-finestre di due anni che si sovrappongono (le osservazioni indipendenti sono molte
-meno di quelle contate). Se un gruppo ha meno di sei osservazioni il confronto non
-viene fatto. È un indizio su come si è comportato questo titolo, non una regola
-generale.
-
-### Intorno ai dividendi: l'analisi fondamentale
-
-Resta l'analisi generale — valutazione, qualità del business, crescita, solidità
-finanziaria, tendenza del prezzo, quattro modelli di valutazione — perché è quella
-che dice se la cedola è sostenuta dai conti. **Quando i due modelli non
-concordano, l'app lo dichiara** invece di fare una media: guardano cose diverse, e
-la divergenza è informativa. Su `demo:tagliato` il modello generale vede un titolo
-a sconto sugli utili e quello sui dividendi vede una cedola che non regge: è il
-profilo tipico di una trappola di valore.
+Prices, financial statements and cash flows come from Yahoo Finance: coverage
+there is good even on SET stocks.
 
 ---
 
-## Struttura
+## What it computes, and how
+
+### 1. Ten years of distribution
+
+Dividend per share year by year, with the year in progress kept out of every
+average (it is incomplete by definition). Average growth over 3, 5 and 10 years;
+cuts with their year and their size; skipped years; consecutive increases; the
+payment cadence.
+
+Two details that change the numbers:
+
+- **Cuts and increases are counted only between consecutive calendar years.** A
+  stock that skips 2020 and 2021 has not "cut" on the way from 2019 to 2022.
+- **With a zero year inside the window, average growth is not computed.** On an
+  irregular payer a CAGR means nothing, and declaring it absent is more useful
+  than inventing it.
+
+### 2. How much of the return came from the coupons
+
+Ten-year total return with the dividends reinvested at each payment, against the
+price alone. On an income stock this is the number that says whether the promise
+was kept: a price flat for ten years while collecting 6% a year is not a failed
+investment. **The share can exceed 100%**: if the price fell, the coupons
+produced the entire return and covered the loss as well.
+
+### 3. Is today's price generous?
+
+The current yield is compared with **its own** history, not with a market
+average: more than two thousand daily observations over ten years, with median,
+quartiles and percentile.
+
+One detail that looks technical and is not: the historical series and today's
+yield use **the same measure** (the last N payments annualised, N being the usual
+cadence). A 365-day window over payments on near-fixed dates captures now two and
+now one depending on the day, and the percentile would end up comparing two
+different things.
+
+### 4. Will the dividend hold?
+
+A 0-100 score that starts at 50 and adds the points of seven factors, **each one
+visible with its points and its explanation**: share of earnings paid out, cover
+from real free cash flow, net debt/EBITDA, the trend in earnings, the history of
+cuts, payment continuity, dividend growth.
+
+It is **a stated rule, not a statistical model trained** on a historical database
+of cuts. The advantage is that you can see where the number comes from and
+disagree on a factor.
+
+Three corrections learned from the real cases:
+
+- Dividend growth uses the **more prudent** of the 5- and 10-year measures: after
+  a cut, the five-year average measures the climb back from the low and would
+  reward precisely the company that cut.
+- A company that **skips years** cannot pass 45 points (35 if it skips three or
+  more), however prudent the payout in the years it does pay.
+- A yield above **1.7 times** its own median raises the cut risk: when the coupon
+  yields far more than usual, the market is normally already pricing something
+  in.
+
+### 5. What it will pay over the next two years
+
+Three independent methods, weighted and kept visible: **damped historical trend**
+(past growth taken at 60%, because a straight line through logarithms
+extrapolates with too much confidence), **payout ratio on expected earnings**,
+**share of free cash flow**. What comes out is a range, not a single number. When
+cut risk is high, the pessimistic scenario assumes a reduction of 40-50%.
+
+### 6. The signal, and why
+
+The valuation is the yield reverting towards its median: if the stock has
+historically yielded 5% and yields 7% today, then with the dividend confirmed the
+"normal" price is higher. Two years of collected coupons are added to that.
+
+Three brakes, all of them born from errors seen in testing:
+
+- **Reversion to the median is assumed only halfway.** If the price has had a
+  long trend, the old median describes a company and a market different from
+  today's.
+- **A fragile dividend permanently deserves a higher yield.** Below 60 points of
+  safety the target yield is raised by up to 90%: anyone assuming a return to the
+  old median is betting that the company becomes what it used to be.
+- **When a cut is likely, the stock is valued on the cut dividend.** This is the
+  most expensive mistake a dividend model can make: without this correction the
+  `demo:tagliato` profile produced **+112%** of expected two-year return on a
+  company whose dividend was at risk. With the correction it produces -35%.
+
+Entry price, estimated value and trim price all come out of the same target
+yield, so the three numbers do not tell different stories: you buy when the
+coupon yields a fifth more than the stock deserves, you trim when it yields a
+fifth less.
+
+### 7. Has the signal ever worked on this stock?
+
+This part is measured, not asserted. For every month-end of the last ten years
+the tool looks at which percentile the yield sat in against the previous three
+years, and measures the total return of the **following two years**. Then it
+compares the groups.
+
+The limits are declared next to the result: one stock, one period, overlapping
+two-year windows (the independent observations are far fewer than those counted).
+If a group has fewer than six observations the comparison is not made. It is a
+hint about how this stock behaved, not a general rule.
+
+### Around the dividends: the fundamental analysis
+
+The general analysis is still there — valuation, business quality, growth,
+financial strength, price trend, four valuation models — because that is what
+says whether the coupon is supported by the accounts. **When the two models
+disagree, the app says so** instead of averaging them: they look at different
+things, and the divergence is informative. On `demo:tagliato` the general model
+sees a stock at a discount on earnings and the dividend model sees a coupon that
+will not hold: the classic profile of a value trap.
+
+---
+
+## Structure
 
 ```
-app.py                 interfaccia web (Streamlit)
+app.py                 web interface (Streamlit)
 setxray/
-  sources/             le fonti alternative
-    base.py            astrazione, lettura difensiva dei JSON, confronto fra fonti
-    setofficial.py     sito ufficiale SET · csvfile.py  file locale
+  sources/             the alternative sources
+    base.py            abstraction, defensive JSON reading, comparison of sources
+    setofficial.py     official SET website · csvfile.py  local file
     eodhd.py · fmp.py · alphavantage.py · yahoo.py
-  dividends.py         il motore: storia, solidità, previsione, segnale, verifica
-  datasource.py        prezzi e bilanci da Yahoo Finance, cache, simboli SET
-  metrics.py           bilanci -> metriche (margini, ROE/ROIC, debito, multipli)
-  valuation.py         quattro modelli di valutazione e il costo del capitale
-  scoring.py           cinque pilastri, campanelli d'allarme, verdetto generale
-  narrative.py         il racconto in italiano + report markdown
-  charts.py            diciotto grafici (Plotly)
-  engine.py            analyze(): il filo che unisce tutto
+  dividends.py         the engine: history, safety, forecast, signal, backtest
+  datasource.py        prices and statements from Yahoo Finance, cache, SET symbols
+  metrics.py           statements -> metrics (margins, ROE/ROIC, debt, multiples)
+  valuation.py         four valuation models and the cost of equity
+  scoring.py           five pillars, red flags, general verdict
+  narrative.py         the written analysis + markdown report
+  charts.py            eighteen charts (Plotly)
+  engine.py            analyze(): the thread that ties it together
   cli.py · demo.py · fmt.py
-tests/                 273 test, tutti eseguibili senza rete
+mobile/setxray.html    the phone preview: one static page, hand-drawn SVG charts
+tools/export_preview.py  runs the engine on the demo profiles -> mobile/dati.js
+tests/                 273 tests, all runnable without a network
 ```
 
-I grafici seguono due regole non negoziabili: **mai due assi verticali** nello
-stesso riquadro (due unità diverse diventano due grafici), e la palette è
-verificata per il daltonismo con il valore sempre scritto accanto al colore.
+The phone preview is a static page, so it cannot run Python: the engine's output
+is computed once and written beside it as a JavaScript file.
 
-## Test
+```bash
+python tools/export_preview.py mobile/dati.js
+```
+
+The interface and every word it prints are in English; the code's own internal
+names and comments are in Italian, the language this was built in.
+
+The charts follow two non-negotiable rules: **never two vertical axes** in the
+same panel (two different units become two charts), and the palette is verified
+for colour blindness with the value always written beside the colour.
+
+## Tests
 
 ```bash
 python -m pytest tests/ -q
 ```
 
-Non toccano la rete, e non devono: usano i profili dimostrativi, un `yfinance`
-simulato e le risposte JSON reali di ogni servizio registrate come dati di prova
-(comprese Yahoo che non risponde, risposte vuote e nomi di colonna cambiati).
+They never touch the network, and must not: they use the demo profiles, a
+simulated `yfinance` and the real JSON responses of every service recorded as
+fixtures (including Yahoo not answering, empty responses and renamed columns).
 
-## Limiti da conoscere
+## Limits worth knowing
 
-- **Le API dei dividendi non sono state provate contro i servizi veri** durante
-  lo sviluppo: la rete dell'ambiente di lavoro le bloccava tutte. Le forme delle
-  risposte sono coperte dai test, ma **verifica l'esito al primo uso** — il
-  comando `python -m setxray PTT --dividendi` mostra in fondo quale fonte è stata
-  usata e se le altre concordano. Il percorso CSV non ha questo dubbio.
-- **Yahoo Finance dà quattro esercizi di bilancio**, non dieci: payout e copertura
-  con la cassa si possono ricostruire solo per gli ultimi quattro anni, mentre
-  dividendi e prezzi coprono dieci anni pieni.
-- **Yahoo limita le richieste.** C'è una cache locale di un'ora
-  (`~/.cache/setxray`); se ricevi errori, aspetta qualche minuto.
-- **Il cambio non è previsto.** Il titolo è in baht: per chi investe in euro il
-  rendimento finale dipende anche da EUR/THB.
-- **La previsione del dividendo è un'estrapolazione dai dati di bilancio**, non
-  una lettura delle intenzioni dell'azienda. Un annuncio di investimenti, una
-  acquisizione o un cambio di politica di distribuzione non ci sono dentro.
+- **The dividend APIs were never tried against the real services** during
+  development: the network of the working environment blocked all of them. The
+  shapes of the responses are covered by the tests, but **check the result on
+  first use** — the command `python -m setxray PTT --dividends` shows at the
+  bottom which source was used and whether the others agree. The CSV route does
+  not carry that doubt.
+- **Yahoo Finance gives four financial years**, not ten: payout and cash cover
+  can only be reconstructed for the last four years, while dividends and prices
+  cover a full ten.
+- **Yahoo rate-limits requests.** There is a one-hour local cache
+  (`~/.cache/setxray`); if you get errors, wait a few minutes.
+- **The exchange rate is not forecast.** The stock is in baht: for anyone
+  investing in euros the final return also depends on EUR/THB.
+- **The dividend forecast is an extrapolation from the financial statements**, not
+  a reading of the company's intentions. An investment announcement, an
+  acquisition or a change of distribution policy are not in it.
 
-## Avvertenza
+## Warning
 
-Questa applicazione è un'elaborazione automatica di dati pubblici. **Non è
-consulenza finanziaria e non è una raccomandazione personalizzata.** Prima di
-investire verifica sempre i numeri sui bilanci ufficiali della società e sul sito
-della Stock Exchange of Thailand, e considera la tua situazione personale.
+This application is an automated elaboration of public data. **It is not
+financial advice and it is not a personalised recommendation.** Before investing,
+always check the figures against the company's official statements and the Stock
+Exchange of Thailand website, and consider your own situation.

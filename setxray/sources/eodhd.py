@@ -20,7 +20,7 @@ URL = "https://eodhd.com/api/div/{symbol}"
 def dividends(symbol: str) -> Optional[pd.Series]:
     chiave = os.environ.get("EODHD_API_KEY")
     if not chiave:
-        raise FetchError("manca EODHD_API_KEY")
+        raise FetchError("EODHD_API_KEY is missing")
     from setxray.datasource import normalize_symbol
 
     _, yahoo_symbol = normalize_symbol(symbol)  # EODHD usa lo stesso suffisso .BK

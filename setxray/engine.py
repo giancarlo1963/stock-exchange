@@ -30,7 +30,7 @@ from setxray.valuation import (
 
 
 class NoDataError(RuntimeError):
-    """Nessun dato utilizzabile per il simbolo richiesto."""
+    """No usable data for the requested symbol."""
 
 
 @dataclass
@@ -77,8 +77,8 @@ def analyze_data(data: StockData, *, risk_free: float = RISK_FREE_TH,
     metrics = compute_metrics(data)
     if metrics.price is None:
         raise NoDataError(
-            f"Nessun prezzo disponibile per {data.symbol}. Controlla il simbolo: "
-            "deve essere quello della SET, per esempio PTT, AOT, CPALL."
+            f"No price available for {data.symbol}. Check the symbol: it must be a SET "
+            "ticker, for example PTT, AOT or CPALL."
         )
     valuation = value_company(metrics, risk_free=risk_free, erp=erp)
     verdict = evaluate(metrics, valuation)
@@ -86,10 +86,10 @@ def analyze_data(data: StockData, *, risk_free: float = RISK_FREE_TH,
     analysis = Analysis(data=data, metrics=metrics, valuation=valuation,
                         verdict=verdict, dividends=dividendi)
     analysis.narrative = {
-        "passato": narrative.past(metrics),
-        "presente": narrative.present(metrics, valuation),
-        "futuro": narrative.future(metrics, valuation, verdict),
-        "dividendi": narrative.dividends(dividendi),
+        "past": narrative.past(metrics),
+        "present": narrative.present(metrics, valuation),
+        "future": narrative.future(metrics, valuation, verdict),
+        "dividends": narrative.dividends(dividendi),
     }
     return analysis
 
@@ -113,8 +113,8 @@ def analyze(symbol: str, *, cache_ttl_min: float = DEFAULT_CACHE_TTL_MIN,
     data = fetch_stock(symbol, cache_ttl_min=cache_ttl_min, history_period=history_period)
     if data.prices is None and not data.info:
         raise NoDataError(
-            f"Yahoo Finance non restituisce dati per {data.yahoo_symbol}. "
-            "Verifica che il simbolo esista alla SET e che ci sia connessione a internet."
+            f"Yahoo Finance returns no data for {data.yahoo_symbol}. Check that the symbol "
+            "exists on the SET and that you have an internet connection."
         )
     return analyze_data(data, risk_free=risk_free, erp=erp,
                         dividend_sources=dividend_sources)

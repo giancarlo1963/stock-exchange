@@ -1,0 +1,697 @@
+<title>SET X-Ray Dividends</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+  /* Palette completa sul :root nudo: e' lo stato in cui la pagina si apre per
+     la maggior parte dei lettori (tema "sistema", nessuno stampo sulla radice). */
+  :root {
+    color-scheme: light;
+    --ground:   #f4f7f6;
+    --surface:  #ffffff;
+    --sunken:   #eaf0ee;
+    --line:     #d7e1df;
+    --line-soft:#e6eceb;
+    --ink:      #0a1211;
+    --ink-soft: #596a67;
+    --ink-faint:#879895;
+    --accent:   #0c5f66;
+    --accent-soft:#e0efef;
+    --good:     #0a7f3f;
+    --good-bg:  #0a7f3f;
+    --warn:     #96650a;
+    --warn-bg:  #a06a00;
+    --bad:      #b8332f;
+    --bad-bg:   #b8332f;
+    --on-band:  #ffffff;
+    --serie-a:  #14666e;
+    --serie-b:  #c26a2a;
+    --band-fill:#0c5f6614;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground:   #101615;
+      --surface:  #19211f;
+      --sunken:   #1f2apx;
+      --sunken:   #222b29;
+      --line:     #2b3634;
+      --line-soft:#232d2b;
+      --ink:      #edf3f1;
+      --ink-soft: #9dacaa;
+      --ink-faint:#75837f;
+      --accent:   #5cbac1;
+      --accent-soft:#13302f;
+      --good:     #3fc274;
+      --good-bg:  #12833f;
+      --warn:     #e0a53a;
+      --warn-bg:  #8d5c00;
+      --bad:      #ef7d78;
+      --bad-bg:   #a82f2b;
+      --on-band:  #ffffff;
+      --serie-a:  #4fb3bb;
+      --serie-b:  #e08b4c;
+      --band-fill:#5cbac11f;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground:   #101615;
+    --surface:  #19211f;
+    --sunken:   #222b29;
+    --line:     #2b3634;
+    --line-soft:#232d2b;
+    --ink:      #edf3f1;
+    --ink-soft: #9dacaa;
+    --ink-faint:#75837f;
+    --accent:   #5cbac1;
+    --accent-soft:#13302f;
+    --good:     #3fc274;
+    --good-bg:  #12833f;
+    --warn:     #e0a53a;
+    --warn-bg:  #8d5c00;
+    --bad:      #ef7d78;
+    --bad-bg:   #a82f2b;
+    --on-band:  #ffffff;
+    --serie-a:  #4fb3bb;
+    --serie-b:  #e08b4c;
+    --band-fill:#5cbac11f;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: Archivo, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+  }
+  .guscio { max-width: 640px; margin: 0 auto; padding-inline: 20px; padding-block: 0 64px; }
+
+  /* ---------- intestazione e selettore ---------- */
+  .testata { padding-block: 22px 14px; }
+  .occhiello {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 6px;
+  }
+  .testata h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.015em; margin: 0; text-wrap: balance; }
+  .testata p { margin: 6px 0 0; font-size: 14px; color: var(--ink-soft); }
+
+  .nastro {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--ground) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    margin-inline: -20px; padding: 10px 20px;
+  }
+  .chip-riga { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+  .chip-riga::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto; cursor: pointer;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px; font-weight: 500; letter-spacing: 0.03em;
+    padding: 7px 12px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+  }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+  :root[data-theme="dark"] .chip[aria-pressed="true"],
+  :root:not([data-theme="light"]) .chip[aria-pressed="true"] { color: #0b1413; }
+  .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- avviso dati finti ---------- */
+  .finto {
+    display: flex; gap: 10px; align-items: flex-start;
+    margin-top: 16px; padding: 11px 14px;
+    border: 1px solid var(--line); border-left: 3px solid var(--warn);
+    border-radius: 4px; background: var(--surface);
+    font-size: 13px; line-height: 1.45; color: var(--ink-soft);
+  }
+  .finto strong { color: var(--ink); }
+
+  /* ---------- azienda ---------- */
+  .azienda { padding-block: 22px 0; }
+  .azienda h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+  .meta {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px; color: var(--ink-faint); margin: 7px 0 0;
+    display: flex; flex-wrap: wrap; gap: 4px 10px;
+  }
+  .meta .cod { color: var(--accent); font-weight: 500; }
+
+  /* ---------- fascia del verdetto: l'unico momento forte ---------- */
+  .verdetto {
+    margin-top: 18px; padding: 22px 20px; border-radius: 6px;
+    background: var(--good-bg); color: var(--on-band);
+  }
+  .verdetto.vendi { background: var(--bad-bg); }
+  .verdetto.mantieni { background: var(--warn-bg); }
+  .verdetto .azione {
+    font-size: clamp(30px, 9vw, 40px); font-weight: 700;
+    letter-spacing: -0.03em; line-height: 1.02; margin: 0; text-wrap: balance;
+  }
+  .verdetto .sotto {
+    margin: 10px 0 0; font-size: 13.5px; line-height: 1.5; opacity: 0.93;
+  }
+  .verdetto .sotto b { font-weight: 600; }
+
+  /* ---------- riquadri numerici ---------- */
+  .griglia { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; margin-top: 1px;
+             background: var(--line-soft); border: 1px solid var(--line-soft); border-radius: 0 0 6px 6px;
+             overflow: hidden; }
+  .cifra { background: var(--surface); padding: 13px 14px 14px; }
+  .cifra .et {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 5px;
+  }
+  .cifra .val {
+    font-size: 21px; font-weight: 600; letter-spacing: -0.015em;
+    font-variant-numeric: tabular-nums; margin: 0; line-height: 1.15;
+  }
+  .cifra .val.su { color: var(--good); }
+  .cifra .val.giu { color: var(--bad); }
+  .cifra .nt { margin: 5px 0 0; font-size: 11.5px; line-height: 1.35; color: var(--ink-soft); }
+
+  /* ---------- sezioni ---------- */
+  section { margin-top: 34px; }
+  h3 {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.11em; text-transform: uppercase;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    color: var(--accent); margin: 0 0 4px;
+  }
+  .occhio-nota { margin: 0 0 14px; font-size: 13px; color: var(--ink-soft); line-height: 1.45; }
+
+  .motivi { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 11px; }
+  .motivi li {
+    padding-left: 13px; border-left: 2px solid var(--accent-soft);
+    font-size: 14.5px; line-height: 1.55;
+  }
+  .motivi li:first-child { border-left-color: var(--accent); }
+
+  .avvisi { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+  .avviso {
+    display: flex; gap: 9px; padding: 10px 13px; border-radius: 4px;
+    background: var(--surface); border: 1px solid var(--line);
+    font-size: 13px; line-height: 1.45; color: var(--ink-soft);
+  }
+  .avviso .tag {
+    flex: 0 0 auto; font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600;
+    padding-top: 2px;
+  }
+  .avviso.grave { border-left: 3px solid var(--bad); }
+  .avviso.grave .tag { color: var(--bad); }
+  .avviso.lieve { border-left: 3px solid var(--warn); }
+  .avviso.lieve .tag { color: var(--warn); }
+
+  /* ---------- grafici ---------- */
+  figure { margin: 0 0 22px; }
+  figure:last-child { margin-bottom: 0; }
+  .tela { background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 14px 12px 10px; }
+  .tela svg { display: block; width: 100%; height: auto; color: var(--ink-soft); }
+  figcaption { margin-top: 8px; font-size: 12.5px; line-height: 1.45; color: var(--ink-soft); }
+  .titolo-g { font-size: 15px; font-weight: 600; margin: 0 0 9px; letter-spacing: -0.01em; }
+
+  .legenda {
+    display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 9px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; color: var(--ink-soft);
+  }
+  .legenda span { display: inline-flex; align-items: center; gap: 5px; }
+  .legenda i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  /* ---------- tabella copertura ---------- */
+  .scorri { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: right; padding: 7px 6px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 500; border-bottom-color: var(--line);
+  }
+  td.num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  td.rosso { color: var(--bad); font-weight: 500; }
+
+  /* ---------- racconto ---------- */
+  .racconto p {
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: 16.5px; line-height: 1.62; margin: 0 0 13px; color: var(--ink);
+  }
+  .racconto p:last-child { margin-bottom: 0; }
+  details { margin-top: 4px; }
+  summary {
+    cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent);
+    padding: 9px 0; list-style: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: " ↓"; }
+  details[open] summary::after { content: " ↑"; }
+  summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- piede ---------- */
+  .piede {
+    margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--line);
+    font-size: 13.5px; line-height: 1.55; color: var(--ink-soft);
+  }
+  .piede h3 { margin-bottom: 10px; }
+  .piede p { margin: 0 0 12px; }
+  .piede a { color: var(--accent); text-underline-offset: 3px; }
+  .piede code, pre code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px;
+  }
+  pre {
+    background: var(--sunken); border: 1px solid var(--line); border-radius: 4px;
+    padding: 12px 13px; overflow-x: auto; margin: 0 0 12px; line-height: 1.6;
+    color: var(--ink);
+  }
+  .disclaimer {
+    margin-top: 18px; font-size: 12px; line-height: 1.5; color: var(--ink-faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="guscio">
+  <header class="testata">
+    <p class="occhiello">Stock Exchange of Thailand</p>
+    <h1>Ten years of dividends, and what to do about them</h1>
+    <p>A preview of the tool: six test companies, with the real output of the analysis engine.</p>
+  </header>
+
+  <div class="nastro">
+    <div class="chip-riga" id="selettore" role="group" aria-label="Choose the test company"></div>
+  </div>
+
+  <p class="finto">
+    <span aria-hidden="true">⚗︎</span>
+    <span><strong>Invented companies, synthetic numbers.</strong> They are here to show how the
+    tool reasons in the typical cases. These are not real companies and must not be used to
+    decide anything. For real SET data, see the bottom of the page.</span>
+  </p>
+
+  <main id="app"></main>
+
+  <footer class="piede">
+    <h3>Trying it on real stocks</h3>
+    <p>
+      The analysis runs in Python and fetches the data on the spot, so from a phone it has
+      to be put online once. That is free and takes a couple of minutes from the iPhone
+      browser:
+    </p>
+    <p>
+      <a href="https://share.streamlit.io/deploy?repository=giancarlo1963%2Fstock-exchange&amp;branch=claude%2Fthailand-equity-analyzer-rfrfkp&amp;mainModule=app.py">
+        Open the pre-filled publishing form →</a><br>
+      Sign in with GitHub, press <em>Deploy</em>, wait two minutes. You get an address of
+      your own that you can add to the home screen.
+    </p>
+    <p>Or, from a computer:</p>
+    <pre><code>git clone -b claude/thailand-equity-analyzer-rfrfkp \
+  https://github.com/giancarlo1963/stock-exchange.git
+cd stock-exchange
+pip install -r requirements.txt
+streamlit run app.py</code></pre>
+    <p>
+      On the first stock you analyse, check the <em>Data sources</em> tab: it says which
+      archive the payments came from and whether the other sources agree.
+    </p>
+    <p class="disclaimer">
+      Automated processing of public data. This is not financial advice, nor a personalised
+      recommendation. Always check the figures against the company's official statements
+      and the Stock Exchange of Thailand website.
+    </p>
+  </footer>
+</div>
+
+<script src="dati.js"></script>
+<script>
+(function () {
+  "use strict";
+  const D = window.DATI || {};
+  const ORDINE = ["dividendo", "tagliato", "irregolare", "solida", "cara", "difficolta"];
+  const NOMI = { dividendo: "Solid coupon", tagliato: "Dividend cut",
+                 irregolare: "Irregular payer", solida: "Growing",
+                 cara: "Expensive", difficolta: "In trouble" };
+
+  // ---------- numeri all'inglese ----------
+  const nf = (d) => new Intl.NumberFormat("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const num = (v, d = 2) => v == null ? "n/a" : nf(d).format(v);
+  const pct = (v, d = 1, segno = false) => v == null ? "n/a"
+    : (segno && v > 0 ? "+" : "") + nf(d).format(v * 100) + "%";
+  const bat = (v, d = 2) => v == null ? "n/a" : num(v, d) + " THB";
+  const esc = (s) => String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  // ---------- disegno SVG ----------
+  // Un solo mappatore di coordinate per tutti i grafici: le etichette nascono
+  // dagli stessi valori dei segni, quindi non possono raccontare altro.
+  function scala(min, max, da, a) {
+    const d = (max - min) || 1;
+    return (v) => da + (v - min) / d * (a - da);
+  }
+  const CT = "font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;fill:currentColor";
+
+  function graficoDividendi(d) {
+    const W = 620, H = 240, L = 34, R = 10, T = 12, B = 26;
+    const anni = d.anni;
+    const p = d.previsione;
+    const futuri = (p && p.y1 != null) ? [
+      { anno: anni[anni.length - 1].anno + 1, dps: p.y1, min: p.y1min, max: p.y1max },
+      { anno: anni[anni.length - 1].anno + 2, dps: p.y2, min: p.y2min, max: p.y2max },
+    ] : [];
+    const tutti = anni.map(a => ({ ...a, prev: false })).concat(futuri.map(f => ({ ...f, prev: true })));
+    const massimo = Math.max(...tutti.map(t => Math.max(t.dps || 0, t.max || 0))) * 1.12 || 1;
+    const y = scala(0, massimo, H - B, T);
+    const passo = (W - L - R) / tutti.length;
+    const larg = Math.min(passo * 0.62, 30);
+    let s = "";
+    // griglia
+    for (let i = 0; i <= 2; i++) {
+      const v = massimo * i / 2, yy = y(v);
+      s += `<line x1="${L}" y1="${yy.toFixed(1)}" x2="${W - R}" y2="${yy.toFixed(1)}" stroke="currentColor" stroke-opacity="0.16"/>`;
+      s += `<text x="${L - 6}" y="${(yy + 3.5).toFixed(1)}" text-anchor="end" style="${CT}">${num(v, v < 2 ? 1 : 0)}</text>`;
+    }
+    tutti.forEach((t, i) => {
+      const cx = L + passo * (i + 0.5);
+      const alt = Math.max(1, (H - B) - y(t.dps || 0));
+      const col = t.prev ? "var(--accent)" : t.taglio || (t.dps || 0) <= 0 ? "var(--bad)"
+                 : !t.completo ? "var(--ink-faint)" : "var(--serie-a)";
+      const riemp = t.prev ? `fill="var(--surface)" stroke="${col}" stroke-width="1.5"` : `fill="${col}"`;
+      if ((t.dps || 0) > 0) {
+        s += `<rect x="${(cx - larg / 2).toFixed(1)}" y="${y(t.dps).toFixed(1)}" width="${larg.toFixed(1)}" height="${alt.toFixed(1)}" rx="2" ${riemp}/>`;
+      }
+      if (t.prev && t.min != null && t.max != null) {
+        s += `<line x1="${cx.toFixed(1)}" y1="${y(t.max).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(t.min).toFixed(1)}" stroke="var(--accent)" stroke-width="1.5"/>`;
+        [t.min, t.max].forEach(v => {
+          s += `<line x1="${(cx - 4).toFixed(1)}" y1="${y(v).toFixed(1)}" x2="${(cx + 4).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--accent)" stroke-width="1.5"/>`;
+        });
+      }
+      if (i % 2 === 0 || i === tutti.length - 1) {
+        s += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" style="${CT}">'${String(t.anno).slice(2)}</text>`;
+      }
+    });
+    s += `<line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" stroke="currentColor" stroke-opacity="0.35"/>`;
+    return svg(W, H, s, "Dividend per share year by year, with the estimate for the next two years");
+  }
+
+  function graficoRendimento(d) {
+    const r = d.rendimento, serie = r.serie || [];
+    if (serie.length < 12) return null;
+    const W = 620, H = 200, L = 40, R = 86, T = 12, B = 24;
+    const valori = serie.map(p => p[1]);
+    const min = Math.min(...valori, r.attuale || Infinity) * 0.92;
+    const max = Math.max(...valori, r.attuale || 0) * 1.06;
+    const x = scala(0, serie.length - 1, L, W - R);
+    const y = scala(min, max, H - B, T);
+    let s = "";
+    if (r.p25 != null && r.p75 != null) {
+      s += `<rect x="${L}" y="${y(r.p75).toFixed(1)}" width="${W - R - L}" height="${Math.abs(y(r.p25) - y(r.p75)).toFixed(1)}" fill="var(--band-fill)"/>`;
+    }
+    [min + (max - min) * 0.1, min + (max - min) * 0.9].forEach(v => {
+      s += `<text x="${L - 6}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end" style="${CT}">${pct(v, 1)}</text>`;
+    });
+    const punti = serie.map((p, i) => `${x(i).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" ");
+    s += `<polyline points="${punti}" fill="none" stroke="var(--serie-a)" stroke-width="1.8" stroke-linejoin="round"/>`;
+    if (r.mediana != null) {
+      s += `<line x1="${L}" y1="${y(r.mediana).toFixed(1)}" x2="${W - R}" y2="${y(r.mediana).toFixed(1)}" stroke="currentColor" stroke-opacity="0.5"/>`;
+      s += `<text x="${W - 6}" y="${(y(r.mediana) + 3.5).toFixed(1)}" text-anchor="end" style="${CT}">med ${pct(r.mediana, 1)}</text>`;
+    }
+    if (r.attuale != null) {
+      const yy = y(r.attuale), col = r.attuale > (r.mediana || 0) ? "var(--good)" : "var(--bad)";
+      s += `<circle cx="${(W - R).toFixed(1)}" cy="${yy.toFixed(1)}" r="4" fill="${col}"/>`;
+      s += `<text x="${W - 6}" y="${(yy - 8).toFixed(1)}" text-anchor="end" style="${CT};fill:${col};font-weight:600">today ${pct(r.attuale, 1)}</text>`;
+    }
+    [0, Math.floor(serie.length / 2), serie.length - 1].forEach(i => {
+      s += `<text x="${x(i).toFixed(1)}" y="${H - 7}" text-anchor="middle" style="${CT}">${serie[i][0].slice(0, 4)}</text>`;
+    });
+    return svg(W, H, s, "Dividend yield over time against its historical median");
+  }
+
+  function graficoTotale(d) {
+    const serie = (d.totale && d.totale.serie) || [];
+    if (serie.length < 12) return null;
+    const W = 620, H = 200, L = 38, R = 64, T = 14, B = 24;
+    const valori = serie.flatMap(p => [p[1], p[2]]).filter(v => v != null);
+    const min = Math.min(...valori) * 0.96, max = Math.max(...valori) * 1.04;
+    const x = scala(0, serie.length - 1, L, W - R);
+    const y = scala(min, max, H - B, T);
+    let s = "";
+    // Tre tacche ricavate dalla serie: una soglia fissa a 100 resta fuori scala
+    // sui titoli che nel periodo hanno solo perso.
+    [min, (min + max) / 2, max].forEach(v => {
+      s += `<line x1="${L}" y1="${y(v).toFixed(1)}" x2="${W - R}" y2="${y(v).toFixed(1)}" stroke="currentColor" stroke-opacity="0.14"/>`;
+      s += `<text x="${L - 6}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end" style="${CT}">${num(v, 0)}</text>`;
+    });
+    const linea = (idx, col, largh) => {
+      const pts = serie.map((p, i) => p[idx] == null ? null : `${x(i).toFixed(1)},${y(p[idx]).toFixed(1)}`)
+        .filter(Boolean).join(" ");
+      s += `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="${largh}" stroke-linejoin="round"/>`;
+    };
+    linea(1, "var(--serie-b)", 1.5);
+    linea(2, "var(--serie-a)", 2);
+    const ult = serie[serie.length - 1];
+    if (ult[2] != null) s += `<text x="${W - R + 5}" y="${(y(ult[2]) + 3.5).toFixed(1)}" style="${CT};fill:var(--serie-a);font-weight:600">coupons</text>`;
+    if (ult[1] != null) s += `<text x="${W - R + 5}" y="${(y(ult[1]) + 3.5).toFixed(1)}" style="${CT};fill:var(--serie-b)">price</text>`;
+    [0, serie.length - 1].forEach(i => {
+      s += `<text x="${x(i).toFixed(1)}" y="${H - 7}" text-anchor="${i ? "end" : "start"}" style="${CT}">${serie[i][0].slice(0, 4)}</text>`;
+    });
+    return svg(W, H, s, "Return with dividends reinvested against the price alone");
+  }
+
+  function graficoFattori(d) {
+    const f = (d.solidita.fattori || []).filter(x => x.punti);
+    if (!f.length) return null;
+    const ord = f.slice().sort((a, b) => b.punti - a.punti);
+    // Etichetta su una riga, barra sulla riga sotto: a larghezza telefono non
+    // ci stanno affiancate, e sovrapposte non si leggono ne' l'una ne' l'altra.
+    const riga = 42, W = 620, T = 8, B = 20, alt = 12;
+    const H = T + ord.length * riga + B;
+    const cx = W * 0.5, semi = W * 0.5 - 74;
+    const lim = Math.max(...ord.map(x => Math.abs(x.punti))) || 1;
+    const x = scala(-lim, lim, cx - semi, cx + semi);
+    let s = `<line x1="${cx}" y1="${T + 14}" x2="${cx}" y2="${(H - B + 2).toFixed(1)}" stroke="currentColor" stroke-opacity="0.3"/>`;
+    ord.forEach((it, i) => {
+      const top = T + riga * i;
+      const pos = it.punti > 0;
+      const col = pos ? "var(--serie-a)" : "var(--bad)";
+      const x0 = x(0), x1 = x(it.punti);
+      s += `<text x="4" y="${(top + 11).toFixed(1)}" style="font-family:Archivo,system-ui,sans-serif;font-size:12px;fill:currentColor">${esc(it.etichetta)}</text>`;
+      s += `<rect x="${Math.min(x0, x1).toFixed(1)}" y="${(top + 19).toFixed(1)}" width="${Math.max(1.5, Math.abs(x1 - x0)).toFixed(1)}" height="${alt}" rx="2" fill="${col}"/>`;
+      s += `<text x="${(x1 + (pos ? 7 : -7)).toFixed(1)}" y="${(top + 29).toFixed(1)}" text-anchor="${pos ? "start" : "end"}" style="${CT};font-weight:600;fill:${col}">${pos ? "+" : ""}${num(it.punti, 0)} pt</text>`;
+    });
+    s += `<text x="${cx}" y="${(H - 4).toFixed(1)}" text-anchor="middle" style="${CT};opacity:0.75">against  |  in favour</text>`;
+    return svg(W, H, s, "The factors that make up the safety score");
+  }
+
+  function graficoVerifica(d) {
+    const g = (d.verifica.gruppi || []).filter(x => x.n > 0 && x.media != null);
+    if (g.length < 2 || d.verifica.osservazioni < 24) return null;
+    const W = 620, H = 190, L = 10, R = 10, T = 20, B = 54;
+    const valori = g.map(x => x.media);
+    const min = Math.min(0, ...valori) * 1.2, max = Math.max(0, ...valori) * 1.2 || 1;
+    const y = scala(min, max, H - B, T);
+    const passo = (W - L - R) / g.length;
+    let s = `<line x1="${L}" y1="${y(0).toFixed(1)}" x2="${W - R}" y2="${y(0).toFixed(1)}" stroke="currentColor" stroke-opacity="0.4"/>`;
+    g.forEach((it, i) => {
+      const cx = L + passo * (i + 0.5), larg = Math.min(passo * 0.44, 86);
+      const col = it.media >= 0 ? "var(--serie-a)" : "var(--bad)";
+      const y0 = y(0), y1 = y(it.media);
+      s += `<rect x="${(cx - larg / 2).toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${larg.toFixed(1)}" height="${Math.max(2, Math.abs(y1 - y0)).toFixed(1)}" rx="2" fill="${col}"/>`;
+      s += `<text x="${cx.toFixed(1)}" y="${(it.media >= 0 ? y1 - 7 : y1 + 14).toFixed(1)}" text-anchor="middle" style="${CT};font-weight:600;fill:${col}">${pct(it.media, 0, true)}</text>`;
+      // Le etichette portano il segnale fra parentesi ("High yield (buy signal)"):
+      // il capo a riga sta li', altrimenti a larghezza telefono non ci stanno.
+      const parole = it.etichetta.replace(" (", "|(").split("|");
+      parole.forEach((riga, k) => {
+        s += `<text x="${cx.toFixed(1)}" y="${(H - B + 18 + k * 13).toFixed(1)}" text-anchor="middle" style="font-family:Archivo,system-ui,sans-serif;font-size:11px;fill:currentColor">${esc(riga)}</text>`;
+      });
+      s += `<text x="${cx.toFixed(1)}" y="${(H - B + 18 + parole.length * 13).toFixed(1)}" text-anchor="middle" style="${CT};fill:currentColor;opacity:0.7">${it.n} cases</text>`;
+    });
+    return svg(W, H, s, "Average return of the following two years by yield band");
+  }
+
+  function svg(w, h, corpo, titolo) {
+    return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(titolo)}" preserveAspectRatio="xMidYMid meet">${corpo}</svg>`;
+  }
+
+  function figura(titolo, grafico, didascalia, legenda) {
+    if (!grafico) return "";
+    return `<figure><p class="titolo-g">${esc(titolo)}</p><div class="tela">${grafico}</div>
+      ${legenda ? `<div class="legenda">${legenda}</div>` : ""}
+      <figcaption>${didascalia}</figcaption></figure>`;
+  }
+  const pallino = (col, testo) => `<span><i style="background:${col}"></i>${esc(testo)}</span>`;
+
+  // ---------- pagina ----------
+  function intestazione(d) {
+    return `
+      <div class="azienda">
+        <h2>${esc(d.nome)}</h2>
+        <p class="meta"><span class="cod">${esc(d.simbolo)}</span><span>${esc(d.settore || "")}</span>
+          <span>${bat(d.prezzo)}</span></p>
+      </div>`;
+  }
+
+  // Un titolo che non distribuisce non ha nessuno dei riquadri sui dividendi:
+  // meglio dirlo e mostrare il giudizio generale che lasciare buchi.
+  function senzaDividendo(d) {
+    const g = d.generale;
+    const classe = g.azione === "BUY" ? "" : g.azione === "SELL" ? "vendi" : "mantieni";
+    return `
+      ${intestazione(d)}
+      <div class="verdetto ${classe}">
+        <p class="azione">${esc(g.titolo.split(" — ")[0])}</p>
+        <p class="sotto">No dividend on record · horizon 1-2 years<br>
+          General fundamental score <b>${num(g.punteggio, 0)}/100</b> ·
+          expected return <b>${pct(g.atteso, 1, true)}</b></p>
+      </div>
+      <section>
+        <h3>Why there is no dividend signal</h3>
+        <p>This company pays nothing to its shareholders, so the ten-year dividend analysis
+          has nothing to work on. The verdict above comes from the general fundamental
+          analysis: earnings, cash, equity and debt.</p>
+        ${(g.gravi.length || g.avvisi.length) ? `<div class="avvisi">
+          ${g.gravi.map(t => `<div class="avviso grave"><span class="tag">Serious</span><span>${esc(t)}</span></div>`).join("")}
+          ${g.avvisi.slice(0, 3).map(t => `<div class="avviso lieve"><span class="tag">Watch out</span><span>${esc(t)}</span></div>`).join("")}
+        </div>` : ""}
+      </section>
+      ${d.racconto.length ? `<section class="racconto">
+        <h3>The written analysis</h3>
+        ${d.racconto.map(t => `<p>${esc(t)}</p>`).join("")}
+      </section>` : ""}`;
+  }
+
+  function disegna(chiave) {
+    const d = D[chiave];
+    if (!d) return;
+    const html = d.paga ? conDividendo(d) : senzaDividendo(d);
+    document.getElementById("app").innerHTML = html;
+    document.querySelectorAll("#selettore .chip").forEach(c =>
+      c.setAttribute("aria-pressed", String(c.dataset.k === chiave)));
+  }
+
+  function conDividendo(d) {
+    const s = d.segnale, sic = d.solidita, r = d.rendimento, p = d.previsione;
+    const classe = s.azione === "BUY" ? "" : s.azione === "SELL" ? "vendi" : "mantieni";
+    const spiega = s.azione === "BUY" ? "Buy or accumulate"
+      : s.azione === "SELL" ? "Sell or reduce" : "Hold, without adding";
+
+    const anniCompleti = d.anni.filter(a => a.completo);
+    const conCopertura = anniCompleti.filter(a => a.payout != null || a.copertura != null).slice(-6);
+
+    const html = `
+      ${intestazione(d)}
+
+      <div class="verdetto ${classe}">
+        <p class="azione">${esc(s.titolo.split(" - ")[0])}</p>
+        <p class="sotto">${esc(spiega)} · ${esc(s.convinzione)} conviction · horizon 1-2 years<br>
+          Dividend safety <b>${num(sic.punteggio, 0)}/100</b> (${esc(sic.banda)}) ·
+          cut risk <b>${esc(sic.rischio)}</b></p>
+      </div>
+
+      <div class="griglia">
+        <div class="cifra"><p class="et">Yield today</p>
+          <p class="val">${pct(r.attuale)}</p>
+          <p class="nt">historical median ${pct(r.mediana)}${r.percentile != null
+            ? ` · more generous than ${pct(r.percentile, 0)} of its own history` : ""}</p></div>
+        <div class="cifra"><p class="et">Dividend per share</p>
+          <p class="val">${bat(r.dpsIndicato)}</p>
+          <p class="nt">${p.y1 != null ? `next 12 months estimated at ${bat(p.y1)}` : "annualised"}</p></div>
+        <div class="cifra"><p class="et">Expected over 2 years</p>
+          <p class="val ${s.atteso2a > 0.08 ? "su" : s.atteso2a < 0 ? "giu" : ""}">${pct(s.atteso2a, 1, true)}</p>
+          <p class="nt">${pct(s.cedole, 1, true)} from coupons, ${pct(s.prezzoComp, 1, true)} from the price</p></div>
+        <div class="cifra"><p class="et">${s.azione === "SELL" ? "Interesting below" : "Buy below"}</p>
+          <p class="val">${bat(s.ingresso)}</p>
+          <p class="nt">value ${num(s.valore)} · trim above ${num(s.uscita)}</p></div>
+      </div>
+
+      <section>
+        <h3>Why</h3>
+        <ul class="motivi">${s.motivi.map(m => `<li>${esc(m)}</li>`).join("")}</ul>
+        ${(d.generale.gravi.length || d.generale.avvisi.length) ? `<div class="avvisi">
+          ${d.generale.gravi.map(t => `<div class="avviso grave"><span class="tag">Serious</span><span>${esc(t)}</span></div>`).join("")}
+          ${d.generale.avvisi.slice(0, 3).map(t => `<div class="avviso lieve"><span class="tag">Watch out</span><span>${esc(t)}</span></div>`).join("")}
+        </div>` : ""}
+        ${d.generale.azione !== s.azione ? `<div class="avvisi"><div class="avviso lieve">
+          <span class="tag">Disagree</span><span>On dividends the signal is <b>${esc(s.azione)}</b>,
+          on general fundamentals <b>${esc(d.generale.azione)}</b> (score ${num(d.generale.punteggio, 0)}/100).
+          They look at different things: the first weighs how sustainable the coupon is, the
+          second earnings and equity.</span></div></div>` : ""}
+      </section>
+
+      <section>
+        <h3>Ten years of coupons</h3>
+        <p class="occhio-nota">It pays ${d.anni[d.anni.length - 2] && d.anni[d.anni.length - 2].stacchi === 2
+          ? "twice a year, with the final payment in April and the interim one in September"
+          : "once a year"} ·
+          ${d.storico.anni_pagati} years paid out of ${d.storico.anni_osservati} ·
+          ${d.storico.tagli ? `${d.storico.tagli} cut in ${d.storico.anno_ultimo_taglio}` : "no cuts"}</p>
+        ${figura("Dividend per share", graficoDividendi(d),
+          `Red: years with a cut or with no dividend. Grey: the year in progress, incomplete.
+           The hollow bars are the estimate for the next two years, with its range.`,
+          pallino("var(--serie-a)", "paid") + pallino("var(--bad)", "cut") +
+          pallino("var(--ink-faint)", "year in progress") + pallino("var(--accent)", "forecast"))}
+        ${figura("Is today's price generous?", graficoRendimento(d),
+          `The annualised dividend divided by that day's price, compared with its
+           <em>own</em> history, not with a market average. The light band is the central
+           half of the values.`)}
+        ${figura("Where the return came from", graficoTotale(d),
+          d.totale.totale_reinvestito != null
+            ? `Over ${num(d.totale.anni, 0)} years the price did ${pct(d.totale.solo_prezzo, 1, true)},
+               and with the coupons reinvested ${pct(d.totale.totale_reinvestito, 1, true)}
+               (${pct(d.totale.annualizzato, 1, true)} a year).`
+            : "Both lines start at 100.")}
+      </section>
+
+      <section>
+        <h3>Will the dividend hold?</h3>
+        <p class="occhio-nota">It starts at 50 points. Each factor adds or removes points
+          according to a stated rule: you can see where the number comes from and disagree on
+          any one of them. It is not a statistical model trained on past cuts.</p>
+        ${figura(`Score ${num(sic.punteggio, 0)}/100 — ${sic.banda}`, graficoFattori(d),
+          sic.fattori.filter(f => f.punti < 0).slice(0, 2)
+            .map(f => `<b>${esc(f.etichetta)}</b>: ${esc(f.spiegazione)}.`).join(" ") ||
+          "No factor weighs against it.")}
+        ${conCopertura.length ? `<div class="scorri"><table>
+          <thead><tr><th>Year</th><th>Dividend</th><th>Of earnings</th><th>Cash cover</th></tr></thead>
+          <tbody>${conCopertura.map(a => `<tr>
+            <td class="num">${a.anno}</td>
+            <td class="num">${num(a.dps)}</td>
+            <td class="num ${a.payout != null && a.payout > 1 ? "rosso" : ""}">${a.payout != null ? pct(a.payout, 0) : "n/a"}</td>
+            <td class="num ${a.copertura != null && a.copertura < 1 ? "rosso" : ""}">${a.copertura != null ? num(a.copertura, 2) + "x" : "n/a"}</td>
+          </tr>`).join("")}</tbody></table></div>
+          <figcaption style="margin-top:8px">In red, the years when the dividend exceeded
+            earnings, or free cash flow was not enough to cover it.</figcaption>` : ""}
+      </section>
+
+      ${graficoVerifica(d) ? `<section>
+        <h3>Has it worked, on this stock?</h3>
+        <p class="occhio-nota">For every month-end of the last ten years: which band the yield
+          sat in against the previous three years, and what the following two years returned.</p>
+        ${figura("Return of the following two years", graficoVerifica(d), esc(d.verifica.nota))}
+      </section>` : ""}
+
+      <section class="racconto">
+        <h3>The written analysis</h3>
+        ${d.racconto.slice(0, 5).map(t => `<p>${esc(t)}</p>`).join("")}
+        ${d.racconto.length > 5 ? `<details><summary>Read the whole analysis (${d.racconto.length} passages)</summary>
+          ${d.racconto.slice(5).map(t => `<p>${esc(t)}</p>`).join("")}</details>` : ""}
+      </section>`;
+    return html;
+  }
+
+  const sel = document.getElementById("selettore");
+  sel.innerHTML = ORDINE.filter(k => D[k]).map(k =>
+    `<button class="chip" type="button" data-k="${k}" aria-pressed="false">${esc(NOMI[k] || k)}</button>`
+  ).join("");
+  sel.addEventListener("click", (e) => {
+    const b = e.target.closest(".chip");
+    if (b) { disegna(b.dataset.k); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  });
+
+  disegna(ORDINE.find(k => D[k]) || Object.keys(D)[0]);
+})();
+</script>

@@ -20,7 +20,7 @@ URL = "https://www.alphavantage.co/query"
 def dividends(symbol: str) -> Optional[pd.Series]:
     chiave = os.environ.get("ALPHAVANTAGE_API_KEY")
     if not chiave:
-        raise FetchError("manca ALPHAVANTAGE_API_KEY")
+        raise FetchError("ALPHAVANTAGE_API_KEY is missing")
     from setxray.datasource import normalize_symbol
 
     set_symbol, _ = normalize_symbol(symbol)
@@ -37,7 +37,7 @@ def dividends(symbol: str) -> Optional[pd.Series]:
                     "apikey": chiave})
     mensili = dati.get("Monthly Adjusted Time Series") if isinstance(dati, dict) else None
     if not isinstance(mensili, dict):
-        raise FetchError("nessun dividendo nella risposta")
+        raise FetchError("no dividend in the response")
     importi = {}
     for data, valori in mensili.items():
         grezzo = valori.get("7. dividend amount") if isinstance(valori, dict) else None

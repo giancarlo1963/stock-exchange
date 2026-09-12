@@ -18,7 +18,7 @@ USER_AGENT = "setxray/1.1 (analisi dividendi SET; https://github.com/topics/stoc
 
 
 class FetchError(RuntimeError):
-    """La fonte non ha risposto, o ha risposto qualcosa di inutilizzabile."""
+    """The source did not answer, or answered with something unusable."""
 
 
 def get_json(url: str, params: Optional[dict[str, Any]] = None, *,
@@ -37,15 +37,16 @@ def get_json(url: str, params: Optional[dict[str, Any]] = None, *,
         with urllib.request.urlopen(richiesta, timeout=timeout) as risposta:
             corpo = risposta.read()
     except urllib.error.HTTPError as errore:
-        raise FetchError(f"HTTP {errore.code} da {urllib.parse.urlparse(url).netloc}") from errore
+        raise FetchError(f"HTTP {errore.code} from {urllib.parse.urlparse(url).netloc}") from errore
     except Exception as errore:  # rete assente, DNS, TLS, timeout
         raise FetchError(f"{type(errore).__name__}: {errore}") from errore
     if not corpo:
-        raise FetchError("risposta vuota")
+        raise FetchError("empty response")
     try:
         return json.loads(corpo.decode("utf-8", errors="replace"))
     except json.JSONDecodeError as errore:
-        raise FetchError("la risposta non e' JSON (la fonte potrebbe aver cambiato interfaccia)") from errore
+        raise FetchError("the response is not JSON (the source may have changed its "
+                         "interface)") from errore
 
 
 def get_text(url: str, *, timeout: int = TIMEOUT) -> str:

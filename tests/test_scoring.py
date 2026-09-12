@@ -45,7 +45,7 @@ class TestVerdettiSuiProfiliNoti:
     def test_il_verdetto_e_sempre_completo(self, profilo):
         d = analyze_data(build_demo(profilo)).verdict
         assert d.action in (BUY, HOLD, SELL)
-        assert d.conviction in ("alta", "media", "bassa")
+        assert d.conviction in ("high", "medium", "low")
         assert d.headline and d.reasons and d.position_note and d.review_triggers
         assert 0 <= d.composite <= 100
         assert len(d.pillars) == 5
@@ -80,21 +80,21 @@ class TestPrecedenzaDeiProblemiGravi:
 
     @pytest.mark.parametrize("profilo", list(PROFILES))
     def test_due_problemi_gravi_portano_sempre_a_vendere(self, profilo):
-        dopo = self._verdetto_con(profilo, [Flag("grave", "Patrimonio netto negativo."),
-                                            Flag("grave", "Interessi non coperti.")])
+        dopo = self._verdetto_con(profilo, [Flag("grave", "Shareholders' equity is negative."),
+                                            Flag("grave", "Interest costs are not covered.")])
         assert dopo.action == SELL
-        assert dopo.conviction == "alta"
+        assert dopo.conviction == "high"
 
     @pytest.mark.parametrize("profilo", list(PROFILES))
     def test_un_solo_problema_grave_esclude_comunque_l_acquisto(self, profilo):
         """Ci si puo' arrivare per due strade - la penalita' sul segnale o il
         vincolo esplicito - e il test copre entrambe senza legarsi a quale
         delle due sia scattata."""
-        problema = Flag("grave", "Flusso di cassa libero negativo.")
+        problema = Flag("grave", "Free cash flow is negative.")
         pulito = self._verdetto_con(profilo, [])
         segnalato = self._verdetto_con(profilo, [problema])
         assert segnalato.action != BUY
-        assert any("Flusso di cassa" in motivo for motivo in segnalato.reasons)
+        assert any("Free cash flow" in motivo for motivo in segnalato.reasons)
         assert segnalato.raw_signal < pulito.raw_signal
 
     def test_senza_problemi_il_profilo_solido_resta_un_acquisto(self):
@@ -110,7 +110,7 @@ class TestPrecedenzaDeiProblemiGravi:
         analisi = analyze_data(dati)
         assert analisi.metrics.n_years == 0
         assert analisi.verdict.action != BUY
-        assert analisi.verdict.data_quality == "insufficiente"
+        assert analisi.verdict.data_quality == "insufficient"
 
 
 class TestCampanelliDAllarme:
@@ -130,5 +130,5 @@ class TestCampanelliDAllarme:
         m = compute_metrics(build_demo("difficolta"))
         assert m.health["interest_coverage"] < 0
         testi = " ".join(p.text for p in detect_flags(m, value_company(m)))
-        assert "negativo" in testi
-        assert "-0" not in testi, "non si dice 'copre -0,5 volte'"
+        assert "negative" in testi
+        assert "-0" not in testi, "non si dice 'copre -0.5 volte'"

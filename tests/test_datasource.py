@@ -14,6 +14,7 @@ import pytest
 
 from setxray import datasource
 from setxray.datasource import StockData, fetch_stock, latest_close, row, sum_last
+from setxray.scoring import BUY, HOLD, SELL
 
 
 # --------------------------------------------------------------------------
@@ -149,8 +150,8 @@ class TestScaricoNormale:
 
     def test_copertura_dichiarata(self, yfinance_finto):
         copertura = fetch_stock("ptt", cache_ttl_min=0).data_coverage()
-        assert copertura["Prezzi storici"] and copertura["Conto economico"]
-        assert isinstance(copertura["Dividendi"], bool)
+        assert copertura["Price history"] and copertura["Income statement"]
+        assert isinstance(copertura["Dividends"], bool)
 
 
 class TestYahooCheNonCollabora:
@@ -160,14 +161,14 @@ class TestYahooCheNonCollabora:
         dati = fetch_stock("ptt", cache_ttl_min=0)
         assert dati.prices is None
         assert dati.warnings, "un errore deve diventare un avviso leggibile"
-        assert all("non disponibile" in avviso or "non restituisce" in avviso
+        assert all("unavailable" in avviso or "returns no data" in avviso
                    for avviso in dati.warnings)
 
     def test_risposte_vuote_diventano_avvisi(self, yfinance_finto):
         yfinance_finto.Ticker = lambda simbolo: TickerFinto(simbolo, vuoto=True)
         dati = fetch_stock("ptt", cache_ttl_min=0)
         assert dati.income_a is None
-        assert any("non restituisce dati" in avviso for avviso in dati.warnings)
+        assert any("returns no data" in avviso for avviso in dati.warnings)
 
     def test_indice_a_piu_livelli(self):
         """Alcune versioni di yfinance aggiungono il livello 'level_detail'."""
@@ -229,7 +230,7 @@ class TestDalloScaricoAlVerdetto:
         from setxray.engine import analyze_data
 
         analisi = analyze_data(fetch_stock("ptt", cache_ttl_min=0))
-        assert analisi.verdict.action in ("COMPRA", "MANTIENI", "VENDI")
+        assert analisi.verdict.action in (BUY, HOLD, SELL)
         assert analisi.metrics.n_years == 4
         assert analisi.metrics.valuation["pe"] is not None
         assert analisi.report().startswith("# Titolo Finto PCL")
@@ -240,5 +241,5 @@ class TestDalloScaricoAlVerdetto:
 
         monkeypatch.setattr(datasource, "_CACHE_DIR", "/dev/null/inesistente")
         yfinance_finto.Ticker = lambda simbolo: TickerFinto(simbolo, guasto=True)
-        with pytest.raises(NoDataError, match="Nessun prezzo"):
+        with pytest.raises(NoDataError, match="No price available"):
             analyze_data(fetch_stock("ptt", cache_ttl_min=0))

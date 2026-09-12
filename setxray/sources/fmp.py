@@ -19,7 +19,7 @@ URL = "https://financialmodelingprep.com/api/v3/historical-price-full/stock_divi
 def dividends(symbol: str) -> Optional[pd.Series]:
     chiave = os.environ.get("FMP_API_KEY")
     if not chiave:
-        raise FetchError("manca FMP_API_KEY")
+        raise FetchError("FMP_API_KEY is missing")
     from setxray.datasource import normalize_symbol
 
     _, yahoo_symbol = normalize_symbol(symbol)

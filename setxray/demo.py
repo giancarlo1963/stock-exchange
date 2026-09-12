@@ -15,12 +15,23 @@ import pandas as pd
 from setxray.datasource import StockData
 
 PROFILES: dict[str, str] = {
-    "solida": "Azienda in crescita, conti sani, valutazione ragionevole",
-    "cara": "Azienda di qualita' ma pagata molto piu' della sua media storica",
-    "difficolta": "Ricavi in calo, debito alto, cassa negativa",
-    "dividendo": "Utility stabile con dividendo generoso e crescente da 10 anni",
-    "tagliato": "Ha tagliato il dividendo nel 2020 e oggi distribuisce quasi tutto l'utile",
-    "irregolare": "Paga solo negli anni buoni: nessuna continuita'",
+    "solida": "Growing company, healthy accounts, reasonable valuation",
+    "cara": "Quality company priced far above its own historical average",
+    "difficolta": "Falling revenue, high debt, negative cash flow",
+    "dividendo": "Stable utility with a generous dividend, rising for 10 years",
+    "tagliato": "Cut its dividend in 2020 and now pays out almost all its earnings",
+    "irregolare": "Pays only in good years: no continuity",
+}
+
+# The profile keys are identifiers (`demo:solida` in a symbol, and in the tests)
+# so they stay as they are; these are the names the interface shows.
+PROFILE_NAMES: dict[str, str] = {
+    "solida": "solid",
+    "cara": "expensive",
+    "difficolta": "in trouble",
+    "dividendo": "dividend payer",
+    "tagliato": "dividend cut",
+    "irregolare": "irregular payer",
 }
 
 
@@ -198,7 +209,7 @@ def _dividend_payments(p: dict, dps_ultimo: float) -> Optional[pd.Series]:
 def build_demo(profile: str = "solida") -> StockData:
     """Costruisce uno `StockData` completo e coerente con dati inventati."""
     if profile not in PROFILES:
-        raise ValueError(f"Profilo demo sconosciuto: {profile!r}. Scegli fra {sorted(PROFILES)}")
+        raise ValueError(f"Unknown demo profile: {profile!r}. Choose from {sorted(PROFILES)}")
     p = _params(profile)
     annual = _annual_dates()
     quarters = _quarter_dates()
@@ -337,8 +348,8 @@ def build_demo(profile: str = "solida") -> StockData:
         "forwardEps": eps_ttm * (1 + max(-0.2, p["revenue_growth"])),
         "currentPrice": end_price, "previousClose": end_price,
         "longBusinessSummary": (
-            "Societa' fittizia creata per la modalita' dimostrativa di SET X-Ray. "
-            "Nessun dato reale, nessun collegamento con societa' esistenti."
+            "Fictional company created for SET X-Ray's demonstration mode. No real data, "
+            "no connection to any existing company."
         ),
         "numberOfAnalystOpinions": 9,
         "recommendationKey": {
@@ -409,7 +420,7 @@ def build_demo(profile: str = "solida") -> StockData:
         is_demo=True,
     )
     data.warnings.append(
-        "MODALITA' DIMOSTRATIVA: societa' inventata, numeri sintetici. "
-        "Non usare per decisioni di investimento."
+        "DEMONSTRATION MODE: invented company, synthetic numbers. Do not use for investment "
+        "decisions."
     )
     return data

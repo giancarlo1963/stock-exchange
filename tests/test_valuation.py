@@ -10,6 +10,7 @@ import pytest
 from setxray.demo import build_demo
 from setxray.engine import analyze_data
 from setxray.metrics import compute_metrics
+from setxray.scoring import SELL
 from setxray.valuation import (
     COST_OF_EQUITY_CAP,
     COST_OF_EQUITY_FLOOR,
@@ -81,13 +82,13 @@ class TestAziendaInPerdita:
         v = value_company(compute_metrics(build_demo("difficolta")))
         usabili = v.usable_methods()
         assert [metodo.key for metodo in usabili] == ["book_floor"]
-        assert v.reliability == "bassa"
-        assert any("patrimoniale" in nota for nota in v.notes)
+        assert v.reliability == "low"
+        assert any("book-value" in nota for nota in v.notes)
 
     def test_lo_sconto_sul_patrimonio_non_diventa_un_acquisto(self):
         """Un'azienda che brucia patrimonio non e' un affare perche' costa poco."""
         analisi = analyze_data(build_demo("difficolta"))
-        assert analisi.verdict.action == "VENDI"
+        assert analisi.verdict.action == SELL
         assert analisi.valuation.expected_return_2y > 0  # il prezzo e' sotto il patrimonio...
         assert len(analisi.verdict.grave_flags) >= 2     # ...ma i conti non tengono
 

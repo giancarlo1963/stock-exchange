@@ -7,17 +7,18 @@ dipende da niente.
 Dove mettere il file (il primo che esiste vince):
 
     1. il percorso nella variabile d'ambiente SETXRAY_DIVIDEND_CSV
-    2. dati/<SIMBOLO>-dividendi.csv          (accanto all'app)
-    3. ~/.setxray/<SIMBOLO>-dividendi.csv
+    2. data/<SIMBOLO>-dividends.csv          (accanto all'app)
+    3. dati/<SIMBOLO>-dividendi.csv          (i nomi vecchi restano validi)
+    4. ~/.setxray/<SIMBOLO>-dividends.csv
 
 Formato: due colonne, intestazione libera purche' riconoscibile.
 
-    data,importo
+    date,dividend
     2016-04-25,1.10
     2016-09-05,1.10
     2017-04-24,1.20
 
-Vanno bene anche `date,dividend`, il punto e virgola come separatore e la
+Vanno bene anche `data,importo`, il punto e virgola come separatore e la
 virgola come segno decimale.
 """
 
@@ -33,7 +34,7 @@ import pandas as pd
 from setxray.sources.base import CHIAVI_DATA, CHIAVI_IMPORTO, _to_date, clean_series
 from setxray.sources.http import FetchError
 
-CARTELLE = ("dati", os.path.join(os.path.expanduser("~"), ".setxray"))
+CARTELLE = ("data", "dati", os.path.join(os.path.expanduser("~"), ".setxray"))
 
 
 def candidate_paths(symbol: str) -> list[str]:
@@ -42,8 +43,11 @@ def candidate_paths(symbol: str) -> list[str]:
     if imposto:
         percorsi.append(imposto)
     for cartella in CARTELLE:
-        percorsi.append(os.path.join(cartella, f"{symbol}-dividendi.csv"))
-        percorsi.append(os.path.join(cartella, f"{symbol.lower()}-dividendi.csv"))
+        # Accettiamo anche i nomi italiani: chi ha creato il file con la
+        # versione precedente non deve rinominarlo.
+        for nome in (f"{symbol}-dividends.csv", f"{symbol.lower()}-dividends.csv",
+                     f"{symbol}-dividendi.csv", f"{symbol.lower()}-dividendi.csv"):
+            percorsi.append(os.path.join(cartella, nome))
     return percorsi
 
 
@@ -82,7 +86,7 @@ def parse_csv(testo: str) -> Optional[pd.Series]:
     else:
         corpo = righe[1:]
     if len(intestazione) < 2:
-        raise FetchError("il CSV deve avere almeno due colonne: data e importo")
+        raise FetchError("the CSV needs at least two columns: date and amount")
 
     importi: dict = {}
     for riga in corpo:

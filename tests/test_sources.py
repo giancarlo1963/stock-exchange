@@ -232,7 +232,7 @@ class TestRaccoltaEConfronto:
         ])
         insieme = collect_dividends("PTT", fallback=diversa)
         assert insieme.disagreements, "una differenza oltre il 5% va dichiarata"
-        assert "non concorda" in insieme.disagreements[0]
+        assert "disagrees with" in insieme.disagreements[0]
 
     def test_riconosce_la_confusione_fra_baht_e_satang(self, monkeypatch):
         import setxray.sources.base as base
@@ -247,29 +247,29 @@ class TestRaccoltaEConfronto:
 
     def test_una_sola_fonte_viene_dichiarato(self):
         insieme = collect_dividends("PTT", only=[], fallback=self._serie(range(2016, 2026)))
-        assert any("Una sola fonte" in nota for nota in insieme.notes)
-        assert "Nessuna seconda fonte" in insieme.provenance()
+        assert any("Only one source available" in nota for nota in insieme.notes)
+        assert "No second source available" in insieme.provenance()
 
     def test_nessun_dividendo_da_nessuna_fonte(self):
         insieme = collect_dividends("PTT", only=[], fallback=None)
         assert not insieme.ok
         assert insieme.notes
-        assert "Nessuna fonte" in insieme.provenance()
+        assert "No source returned any dividends" in insieme.provenance()
 
 
 class TestRegistro:
     def test_elenco_completo_e_coerente(self):
         fonti = describe_sources()
         assert len(fonti) >= 5
-        chiavi = {riga["chiave"] for riga in fonti}
+        chiavi = {riga["key"] for riga in fonti}
         assert {"set", "csv", "yahoo"} <= chiavi
         for riga in fonti:
-            assert riga["fonte"] and isinstance(riga["attiva"], bool)
-            assert 1 <= riga["fiducia"] <= 5
+            assert riga["source"] and isinstance(riga["active"], bool)
+            assert 1 <= riga["trust"] <= 5
 
     def test_le_fonti_senza_chiave_sono_sempre_attive(self):
-        senza_chiave = [r for r in describe_sources() if r["chiave_api"] == "non serve"]
-        assert all(r["attiva"] for r in senza_chiave)
+        senza_chiave = [r for r in describe_sources() if r["api_key"] == "not needed"]
+        assert all(r["active"] for r in senza_chiave)
 
     def test_selezione_da_variabile_d_ambiente(self, monkeypatch):
         from setxray.sources import requested_sources

@@ -20,6 +20,7 @@ from setxray.dividends import (
 )
 from setxray.engine import analyze, analyze_data
 from setxray.metrics import compute_metrics
+from setxray.scoring import BUY, SELL
 from setxray.sources import collect_dividends
 
 
@@ -181,8 +182,8 @@ class TestSolidita:
     def test_punteggio_e_fattori(self, analisi):
         sicurezza = analisi["dividendo"].dividends.safety
         assert 0 <= sicurezza.score <= 100
-        assert sicurezza.band in ("solido", "da tenere d'occhio", "a rischio")
-        assert sicurezza.cut_risk_band in ("basso", "medio", "alto")
+        assert sicurezza.band in ("solid", "watch closely", "at risk")
+        assert sicurezza.cut_risk_band in ("low", "medium", "high")
         assert len(sicurezza.factors) >= 6
         for fattore in sicurezza.factors:
             assert fattore.label and fattore.explanation
@@ -195,8 +196,8 @@ class TestSolidita:
 
     def test_dividendo_tagliato_e_a_rischio(self, analisi):
         sicurezza = analisi["tagliato"].dividends.safety
-        assert sicurezza.band == "a rischio"
-        assert sicurezza.cut_risk_band == "alto"
+        assert sicurezza.band == "at risk"
+        assert sicurezza.cut_risk_band == "high"
         assert sicurezza.hard_triggers, "va detto perche' e' a rischio"
 
     def test_un_pagatore_irregolare_non_puo_essere_solido(self, analisi):
@@ -204,14 +205,14 @@ class TestSolidita:
         il payout negli anni in cui paga."""
         sicurezza = analisi["irregolare"].dividends.safety
         assert sicurezza.score <= 45
-        assert sicurezza.band != "solido"
-        assert any("irregolare" in f.label.lower() for f in sicurezza.factors)
+        assert sicurezza.band != "solid"
+        assert any("irregular" in f.label.lower() for f in sicurezza.factors)
 
     def test_la_crescita_dopo_un_taglio_non_viene_premiata(self, analisi):
         """A cinque anni la risalita dal minimo sembra crescita: usare la
         misura piu' prudente evita di premiare chi ha tagliato."""
         fattore = next(f for f in analisi["tagliato"].dividends.safety.factors
-                       if f.label.startswith("Crescita media del dividendo"))
+                       if f.label.startswith("Average dividend growth"))
         assert fattore.points < 0
 
 
@@ -246,7 +247,7 @@ class TestPrevisione:
         attuale = d.yield_stats["dps_indicato"]
         assert d.forecast.year1_low <= attuale * 0.65, \
             "con rischio alto lo scenario pessimistico deve prevedere un taglio"
-        assert "taglio" in d.forecast.note.lower()
+        assert "cut" in d.forecast.note.lower()
 
 
 # --------------------------------------------------------------------------
@@ -254,9 +255,9 @@ class TestPrevisione:
 # --------------------------------------------------------------------------
 class TestSegnale:
     @pytest.mark.parametrize("profilo,atteso", [
-        ("dividendo", "COMPRA"),    # cedola solida, crescente, prezzo generoso
-        ("tagliato", "VENDI"),      # rendimento alto perche' il prezzo e' crollato
-        ("irregolare", "VENDI"),    # nessuna continuita': non e' un titolo da reddito
+        ("dividendo", BUY),         # cedola solida, crescente, prezzo generoso
+        ("tagliato", SELL),         # rendimento alto perche' il prezzo e' crollato
+        ("irregolare", SELL),       # nessuna continuita': non e' un titolo da reddito
     ])
     def test_azione_attesa(self, analisi, profilo, atteso):
         assert analisi[profilo].dividends.signal.action == atteso
@@ -308,11 +309,11 @@ class TestSegnale:
         d = analisi["tagliato"].dividends
         assert d.yield_stats["attuale"] > 0.10
         assert d.yield_stats["percentile"] > 0.70
-        assert d.signal.action == "VENDI"
-        assert d.safety.cut_risk_band == "alto"
+        assert d.signal.action == SELL
+        assert d.safety.cut_risk_band == "high"
         # La ragione deve essere detta, non solo il verdetto.
         motivi = " ".join(d.signal.reasons).lower()
-        assert "taglio" in motivi and "scenario pessimistico" in motivi
+        assert "cut risk is high" in motivi and "pessimistic-case dividend" in motivi
 
 
 # --------------------------------------------------------------------------
@@ -323,7 +324,8 @@ class TestVerificaRetrospettiva:
         verifica = analisi["dividendo"].dividends.backtest
         assert verifica.observations > 24
         assert len(verifica.buckets) == 3
-        assert "non una dimostrazione" in verifica.note or "indizio" in verifica.note, \
+        assert ("not a rule that holds in general" in verifica.note
+                or "a hint" in verifica.note), \
             "il limite del metodo va dichiarato accanto al risultato"
 
     def test_non_guarda_nel_futuro(self, analisi):
@@ -356,7 +358,7 @@ class TestIntegrazione:
         import re
 
         for profilo in PROFILES:
-            paragrafi = analisi[profilo].narrative["dividendi"]
+            paragrafi = analisi[profilo].narrative["dividends"]
             assert paragrafi
             testo = " ".join(paragrafi)
             assert "{" not in testo
@@ -365,9 +367,9 @@ class TestIntegrazione:
 
     def test_il_report_contiene_i_dividendi(self, analisi):
         report = analisi["dividendo"].report()
-        assert "## Dividendi: il segnale" in report
-        assert "## Dieci anni di dividendi" in report
-        assert "Solidita' del dividendo, fattore per fattore" in report
+        assert "## Dividends: the signal" in report
+        assert "## Ten years of dividends" in report
+        assert "Dividend safety, factor by factor" in report
 
     def test_senza_prezzi_non_esplode(self):
         """Un titolo di cui abbiamo i dividendi ma non lo storico prezzi."""

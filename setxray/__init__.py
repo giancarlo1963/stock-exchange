@@ -3,7 +3,10 @@
 Pensato per un investitore con orizzonte 1-2 anni: non fa trading, non da'
 segnali intraday. Prende un simbolo (es. PTT), raccoglie da piu' archivi tutti
 i dati pubblici disponibili e conclude con una singola indicazione operativa:
-COMPRA / MANTIENI / VENDI.
+BUY / HOLD / SELL.
+
+Tutto quello che l'utente legge e' in inglese; i nomi interni e i commenti
+restano in italiano, la lingua in cui lo strumento e' stato scritto.
 
 Il centro dello strumento e' la **storia dei dividendi degli ultimi dieci
 anni**: quanto ha pagato, con quanta continuita', quanto del rendimento totale
@@ -12,7 +15,7 @@ due anni. Intorno a questo c'e' l'analisi fondamentale generale, che serve a
 capire se la cedola e' sostenuta dai conti.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __all__ = ["analyze", "Analysis"]
 
 

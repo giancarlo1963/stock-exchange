@@ -21,13 +21,13 @@ class TestCatenaCompleta:
     def test_produce_tutte_le_parti(self, analisi):
         assert analisi.metrics.price > 0
         assert analisi.verdict.action
-        assert set(analisi.narrative) == {"passato", "presente", "futuro", "dividendi"}
+        assert set(analisi.narrative) == {"past", "present", "future", "dividends"}
         for paragrafi in analisi.narrative.values():
             assert paragrafi, "ogni sezione ha almeno un paragrafo"
             assert all(isinstance(p, str) and p.strip() for p in paragrafi)
 
     def test_il_racconto_non_lascia_buchi(self, analisi):
-        """Un 'n/d' nel testo passa, un segnaposto di formattazione no.
+        """Un 'n/a' nel testo passa, un segnaposto di formattazione no.
 
         La ricerca usa i confini di parola: 'finanziata' contiene 'nan'.
         """
@@ -38,14 +38,14 @@ class TestCatenaCompleta:
 
     def test_report_markdown(self, analisi):
         report = build_report(analisi)
-        for sezione in ("# ", "## Perche'", "## Passato", "## Presente", "## Futuro",
-                        "## Metodi di valutazione usati"):
+        for sezione in ("# ", "## Why", "## Past", "## Present", "## Future",
+                        "## Valuation methods used"):
             assert sezione in report
-        assert "consulenza finanziaria" in report
+        assert "financial advice" in report
         assert "{" not in report and not re.search(r"\bNone\b", report)
 
     def test_i_dati_dimostrativi_sono_dichiarati_nel_report(self, analisi):
-        assert "DIMOSTRATIVI" in build_report(analisi)
+        assert "DEMONSTRATION" in build_report(analisi)
 
 
 class TestGrafici:
@@ -72,8 +72,9 @@ class TestGrafici:
         for nome, figura in charts.all_charts(analisi).items():
             if not figura.data:  # segnaposto
                 testi = [annotazione.text for annotazione in figura.layout.annotations]
-                assert testi and any("disponibil" in t or "calcolabil" in t or "applicabil" in t
-                                     or "Nessun" in t for t in testi), nome
+                assert testi and any("not available" in t or "cannot be computed" in t
+                                     or "not applicable" in t or "No " in t
+                                     or "too short" in t for t in testi), nome
 
 
 class TestIngressoPubblico:
@@ -82,7 +83,7 @@ class TestIngressoPubblico:
         assert analyze(chiave).verdict.action
 
     def test_profilo_demo_inesistente(self):
-        with pytest.raises(ValueError, match="Profilo demo sconosciuto"):
+        with pytest.raises(ValueError, match="Unknown demo profile"):
             analyze("demo:inventato")
 
     def test_simbolo_non_valido_non_tocca_la_rete(self):
@@ -90,7 +91,7 @@ class TestIngressoPubblico:
             analyze("   ")
 
     def test_senza_prezzo_errore_chiaro(self):
-        with pytest.raises(NoDataError, match="Nessun prezzo"):
+        with pytest.raises(NoDataError, match="No price available"):
             analyze_data(StockData(symbol="XYZ", yahoo_symbol="XYZ.BK"))
 
 
@@ -106,5 +107,5 @@ class TestCoerenzaInterna:
 
     def test_la_copertura_dei_dati_e_dichiarata(self, analisi):
         copertura = analisi.data.data_coverage()
-        assert copertura["Prezzi storici"] is True
+        assert copertura["Price history"] is True
         assert all(isinstance(valore, bool) for valore in copertura.values())

@@ -66,5 +66,5 @@ def dividends(symbol: str) -> Optional[pd.Series]:
         serie = parse_dividend_records(dati)
         if serie is not None and not serie.empty:
             return serie
-        errori.append(f"{url.split('/api/')[-1]}: nessun dividendo riconosciuto nella risposta")
-    raise FetchError("; ".join(errori[:3]) if errori else "nessun indirizzo disponibile")
+        errori.append(f"{url.split('/api/')[-1]}: no dividend recognised in the response")
+    raise FetchError("; ".join(errori[:3]) if errori else "no endpoint available")
